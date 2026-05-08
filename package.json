@@ -1,0 +1,31 @@
+{
+  "name": "aesthetic-back",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate": "drizzle-kit migrate",
+    "generate": "drizzle-kit generate",
+    "studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.4.3",
+    "@paralleldrive/cuid2": "^2.2.2",
+    "bcryptjs": "^2.4.3",
+    "drizzle-orm": "^0.44.0",
+    "hono": "^4.7.7",
+    "jose": "^5.10.0",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250430.0",
+    "@types/bcryptjs": "^2.4.6",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.4.0"
+  }
+}
