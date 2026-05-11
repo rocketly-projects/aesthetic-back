@@ -7,6 +7,7 @@ import { createDb } from '../lib/db'
 import { signJwt } from '../lib/jwt'
 import { zv } from '../lib/validator'
 import { businesses, users } from '../db/schema'
+import { createUniqueSlug } from '../lib/slug'
 import type { Bindings } from '../index'
 
 const authRoutes = new Hono<{ Bindings: Bindings }>()
@@ -36,10 +37,12 @@ authRoutes.post('/register', zv(registerSchema), async (c) => {
 
   const passwordHash = await bcrypt.hash(password, 12)
 
+  const slug = await createUniqueSlug(db, businessName)
+
   const { business, user } = await db.transaction(async (tx) => {
     const [business] = await tx
       .insert(businesses)
-      .values({ name: businessName })
+      .values({ name: businessName, slug })
       .returning()
 
     const [user] = await tx
@@ -155,10 +158,12 @@ authRoutes.post('/google', zv(googleSchema), async (c) => {
   }
 
   // Case B: new user + businessName — create business and owner
+  const slug = await createUniqueSlug(db, businessName)
+
   const { business, user } = await db.transaction(async (tx) => {
     const [business] = await tx
       .insert(businesses)
-      .values({ name: businessName })
+      .values({ name: businessName, slug })
       .returning()
 
     const [user] = await tx

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createDb } from '../lib/db'
 import { businesses, businessHours } from '../db/schema'
 import { zv } from '../lib/validator'
+import { slugify } from '../lib/slug'
 import { requireJwt } from '../middleware/botAuth'
 import type { Bindings, Variables } from '../index'
 
@@ -11,11 +12,19 @@ const businessRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 const updateBusinessSchema = z.object({
   name: z.string().min(1).max(100).optional(),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9]+$/, 'slug must be lowercase alphanumeric only')
+    .optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
   instagram: z.string().optional(),
   website: z.string().optional(),
   logoUrl: z.string().optional(),
+  depositRequired: z.boolean().optional(),
+  depositPercent: z.number().int().min(0).max(100).optional(),
 })
 
 const updateHoursSchema = z
@@ -47,11 +56,14 @@ businessRoutes.get('/me', requireJwt, async (c) => {
 businessRoutes.put('/me', requireJwt, zv(updateBusinessSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
-  const data = c.req.valid('json')
+  const { slug: rawSlug, ...data } = c.req.valid('json')
+
+  // Normalize the slug if provided
+  const slug = rawSlug ? slugify(rawSlug) : undefined
 
   const [updated] = await db
     .update(businesses)
-    .set({ ...data, updatedAt: new Date() })
+    .set({ ...data, ...(slug ? { slug } : {}), updatedAt: new Date() })
     .where(eq(businesses.id, businessId))
     .returning()
 

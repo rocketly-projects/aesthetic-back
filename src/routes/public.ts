@@ -1,0 +1,273 @@
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { eq, and, ne, asc } from 'drizzle-orm'
+import { z } from 'zod'
+import { createDb } from '../lib/db'
+import { businesses, businessHours, services, appointments, clients } from '../db/schema'
+import { zv, zvQuery } from '../lib/validator'
+import type { Bindings, Variables } from '../index'
+import { BusinessError } from '../index'
+
+const publicRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
+
+// Allow all origins for the public booking widget
+publicRoutes.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'OPTIONS'] }))
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+function minutesToTime(mins: number): string {
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
+}
+
+async function getBusinessBySlug(db: ReturnType<typeof createDb>, slug: string) {
+  const [business] = await db
+    .select()
+    .from(businesses)
+    .where(eq(businesses.slug, slug))
+    .limit(1)
+  return business ?? null
+}
+
+// ─── GET /public/:slug ─────────────────────────────────────────────────────────
+
+publicRoutes.get('/:slug', async (c) => {
+  const db = createDb(c.env.DATABASE_URL)
+  const slug = c.req.param('slug')
+
+  const business = await getBusinessBySlug(db, slug)
+  if (!business) return c.json({ error: 'Business not found' }, 404)
+
+  const hours = await db
+    .select()
+    .from(businessHours)
+    .where(eq(businessHours.businessId, business.id))
+    .orderBy(asc(businessHours.dayOfWeek))
+
+  return c.json({
+    business: {
+      name: business.name,
+      slug: business.slug,
+      address: business.address,
+      phone: business.phone,
+      instagram: business.instagram,
+      logoUrl: business.logoUrl,
+      depositRequired: business.depositRequired,
+      depositPercent: business.depositPercent,
+    },
+    hours: hours.map((h) => ({
+      dayOfWeek: h.dayOfWeek,
+      open: h.open,
+      fromTime: h.fromTime,
+      toTime: h.toTime,
+    })),
+  })
+})
+
+// ─── GET /public/:slug/services ───────────────────────────────────────────────
+
+publicRoutes.get('/:slug/services', async (c) => {
+  const db = createDb(c.env.DATABASE_URL)
+  const slug = c.req.param('slug')
+
+  const business = await getBusinessBySlug(db, slug)
+  if (!business) return c.json({ error: 'Business not found' }, 404)
+
+  const rows = await db
+    .select()
+    .from(services)
+    .where(and(eq(services.businessId, business.id), eq(services.visible, true)))
+    .orderBy(asc(services.name))
+
+  return c.json({
+    services: rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      duration: s.duration,
+      price: s.price,
+      color: s.color,
+      category: s.category,
+    })),
+  })
+})
+
+// ─── GET /public/:slug/availability?date=YYYY-MM-DD&serviceId=xxx ─────────────
+
+const availabilityQuerySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  serviceId: z.string().uuid(),
+})
+
+publicRoutes.get('/:slug/availability', zvQuery(availabilityQuerySchema), async (c) => {
+  const db = createDb(c.env.DATABASE_URL)
+  const slug = c.req.param('slug')
+  const { date, serviceId } = c.req.valid('query')
+
+  const business = await getBusinessBySlug(db, slug)
+  if (!business) return c.json({ error: 'Business not found' }, 404)
+
+  const [service] = await db
+    .select()
+    .from(services)
+    .where(and(eq(services.id, serviceId), eq(services.businessId, business.id), eq(services.visible, true)))
+    .limit(1)
+
+  if (!service) return c.json({ error: 'Service not found' }, 404)
+
+  // Day of week (0=Sunday … 6=Saturday) — use noon UTC to avoid tz shifting
+  const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay()
+
+  const [dayHours] = await db
+    .select()
+    .from(businessHours)
+    .where(and(eq(businessHours.businessId, business.id), eq(businessHours.dayOfWeek, dayOfWeek)))
+    .limit(1)
+
+  if (!dayHours?.open) return c.json({ slots: [] })
+
+  const activeAppointments = await db
+    .select({ time: appointments.time, duration: appointments.duration })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.businessId, business.id),
+        eq(appointments.date, date),
+        ne(appointments.status, 'cancelled')
+      )
+    )
+
+  const start = timeToMinutes(dayHours.fromTime)
+  const end = timeToMinutes(dayHours.toTime)
+  const serviceDuration = service.duration
+
+  const slots: string[] = []
+  for (let m = start; m + serviceDuration <= end; m += 30) {
+    const slotEnd = m + serviceDuration
+    const overlaps = activeAppointments.some((appt) => {
+      const apptStart = timeToMinutes(appt.time)
+      const apptEnd = apptStart + appt.duration
+      return m < apptEnd && slotEnd > apptStart
+    })
+    if (!overlaps) slots.push(minutesToTime(m))
+  }
+
+  return c.json({ slots })
+})
+
+// ─── POST /public/:slug/appointments ─────────────────────────────────────────
+
+const createPublicAppointmentSchema = z.object({
+  serviceId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+  time: z.string().regex(/^\d{2}:\d{2}$/, 'time must be HH:MM'),
+  clientName: z.string().min(1).max(100),
+  clientPhone: z.string().min(1).max(30),
+  clientEmail: z.string().email().optional(),
+})
+
+publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), async (c) => {
+  const db = createDb(c.env.DATABASE_URL)
+  const slug = c.req.param('slug')
+  const { serviceId, date, time, clientName, clientPhone, clientEmail } = c.req.valid('json')
+
+  const business = await getBusinessBySlug(db, slug)
+  if (!business) return c.json({ error: 'Business not found' }, 404)
+
+  const [service] = await db
+    .select()
+    .from(services)
+    .where(and(eq(services.id, serviceId), eq(services.businessId, business.id), eq(services.visible, true)))
+    .limit(1)
+
+  if (!service) return c.json({ error: 'Service not found' }, 404)
+
+  const appointment = await db.transaction(async (tx) => {
+    // Race condition check: re-verify slot availability inside the transaction
+    const activeAppointments = await tx
+      .select({ time: appointments.time, duration: appointments.duration })
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.businessId, business.id),
+          eq(appointments.date, date),
+          ne(appointments.status, 'cancelled')
+        )
+      )
+
+    const slotStart = timeToMinutes(time)
+    const slotEnd = slotStart + service.duration
+
+    const overlaps = activeAppointments.some((appt) => {
+      const apptStart = timeToMinutes(appt.time)
+      const apptEnd = apptStart + appt.duration
+      return slotStart < apptEnd && slotEnd > apptStart
+    })
+
+    if (overlaps) throw new BusinessError('This time slot is no longer available', 409)
+
+    // Find or create client by phone within this business
+    let [client] = await tx
+      .select()
+      .from(clients)
+      .where(and(eq(clients.businessId, business.id), eq(clients.phone, clientPhone)))
+      .limit(1)
+
+    if (!client) {
+      ;[client] = await tx
+        .insert(clients)
+        .values({
+          businessId: business.id,
+          name: clientName,
+          phone: clientPhone,
+          email: clientEmail,
+        })
+        .returning()
+    }
+
+    const [appt] = await tx
+      .insert(appointments)
+      .values({
+        businessId: business.id,
+        clientId: client.id,
+        serviceId: service.id,
+        serviceName: service.name,
+        duration: service.duration,
+        price: service.price,
+        date,
+        time,
+        status: 'pending',
+      })
+      .returning()
+
+    return appt
+  })
+
+  const depositAmount = business.depositRequired
+    ? Math.round((appointment.price * business.depositPercent) / 100)
+    : 0
+
+  return c.json(
+    {
+      appointment: {
+        id: appointment.id,
+        date: appointment.date,
+        time: appointment.time,
+        serviceName: appointment.serviceName,
+        price: appointment.price,
+        status: appointment.status,
+      },
+      deposit: {
+        required: business.depositRequired,
+        percent: business.depositPercent,
+        amount: depositAmount,
+      },
+    },
+    201
+  )
+})
+
+export { publicRoutes }

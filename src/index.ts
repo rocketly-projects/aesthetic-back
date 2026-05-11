@@ -7,6 +7,7 @@ import { serviceRoutes } from './routes/services'
 import { appointmentRoutes } from './routes/appointments'
 import { whatsappRoutes } from './routes/whatsapp'
 import { botRoutes } from './routes/bot'
+import { publicRoutes } from './routes/public'
 import { authMiddleware } from './middleware/auth'
 import { dualAuth } from './middleware/botAuth'
 
@@ -44,6 +45,7 @@ app.use(
 // Rutas públicas
 app.route('/auth', authRoutes)
 app.route('/bot', botRoutes)
+app.route('/public', publicRoutes)
 
 // Sub-router protegido (JWT o bot key según la ruta)
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>()

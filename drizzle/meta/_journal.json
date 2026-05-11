@@ -43,6 +43,13 @@
       "when": 1778196825901,
       "tag": "0005_parched_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778526927052,
+      "tag": "0006_wakeful_thor",
+      "breakpoints": true
     }
   ]
 }

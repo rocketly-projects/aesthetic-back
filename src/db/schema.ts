@@ -18,12 +18,15 @@ export const messageSenderEnum = pgEnum('message_sender', ['client', 'owner', 'b
 export const businesses = pgTable('businesses', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  slug: text('slug').unique().notNull(),
   phone: text('phone'),
   address: text('address'),
   instagram: text('instagram'),
   website: text('website'),
   logoUrl: text('logo_url'),
   whatsappPhone: text('whatsapp_phone'),
+  depositRequired: boolean('deposit_required').default(false).notNull(),
+  depositPercent: integer('deposit_percent').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
