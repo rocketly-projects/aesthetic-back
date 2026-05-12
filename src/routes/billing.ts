@@ -107,7 +107,7 @@ billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) 
   if (!mpRes.ok) {
     const err = await mpRes.json()
     console.error('MP preapproval error:', err)
-    return c.json({ error: 'Error al iniciar el proceso de pago' }, 502)
+    return c.json({ error: 'Error al iniciar el proceso de pago', detail: err }, 502)
   }
 
   const mpData = await mpRes.json() as { id: string; init_point: string }
