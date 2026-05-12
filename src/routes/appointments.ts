@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq, and, asc, sql } from 'drizzle-orm'
+import { eq, and, asc, sql, getTableColumns } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
 import { appointments, clients, services, businessHours } from '../db/schema'
@@ -65,8 +65,12 @@ appointmentRoutes.get('/agenda/:date', async (c) => {
     .limit(1)
 
   const dayAppointments = await db
-    .select()
+    .select({
+      ...getTableColumns(appointments),
+      clientName: clients.name,
+    })
     .from(appointments)
+    .leftJoin(clients, eq(appointments.clientId, clients.id))
     .where(and(eq(appointments.businessId, businessId), eq(appointments.date, date)))
     .orderBy(asc(appointments.time))
 
@@ -107,8 +111,12 @@ appointmentRoutes.get('/', requireJwt, zvQuery(listQuerySchema), async (c) => {
   const offset = (page - 1) * limit
 
   const rows = await db
-    .select()
+    .select({
+      ...getTableColumns(appointments),
+      clientName: clients.name,
+    })
     .from(appointments)
+    .leftJoin(clients, eq(appointments.clientId, clients.id))
     .where(
       and(
         eq(appointments.businessId, businessId),
@@ -161,8 +169,12 @@ appointmentRoutes.get('/:id', requireJwt, async (c) => {
   const id = c.req.param('id')
 
   const [appointment] = await db
-    .select()
+    .select({
+      ...getTableColumns(appointments),
+      clientName: clients.name,
+    })
     .from(appointments)
+    .leftJoin(clients, eq(appointments.clientId, clients.id))
     .where(and(eq(appointments.id, id), eq(appointments.businessId, businessId)))
     .limit(1)
 
