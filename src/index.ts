@@ -8,6 +8,7 @@ import { appointmentRoutes } from './routes/appointments'
 import { whatsappRoutes } from './routes/whatsapp'
 import { botRoutes } from './routes/bot'
 import { publicRoutes } from './routes/public'
+import { billingRoutes } from './routes/billing'
 import { authMiddleware } from './middleware/auth'
 import { dualAuth } from './middleware/botAuth'
 
@@ -17,6 +18,9 @@ export type Bindings = {
   FRONTEND_URL: string
   GOOGLE_CLIENT_ID: string
   BOT_API_KEY: string
+  // Mercado Pago
+  MP_ACCESS_TOKEN: string
+  MP_WEBHOOK_SECRET: string
 }
 
 export type Variables = {
@@ -46,6 +50,7 @@ app.use(
 app.route('/auth', authRoutes)
 app.route('/bot', botRoutes)
 app.route('/public', publicRoutes)
+app.route('/billing', billingRoutes)
 
 // Sub-router protegido (JWT o bot key según la ruta)
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>()
