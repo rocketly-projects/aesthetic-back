@@ -71,3 +71,22 @@ export const requireJwt = createMiddleware<Env>(async (c, next) => {
   }
   await next()
 })
+
+// Blocks access if the business does not have an active plan
+export const requireActivePlan = createMiddleware<Env>(async (c, next) => {
+  const businessId = c.get('businessId')
+  if (!businessId) return c.json({ error: 'Unauthorized' }, 401)
+
+  const db = createDb(c.env.DATABASE_URL)
+  const [business] = await db
+    .select({ planStatus: businesses.planStatus })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1)
+
+  if (!business || business.planStatus !== 'active') {
+    return c.json({ error: 'Plan inactivo. Suscribite para continuar usando Aesthetic.' }, 403)
+  }
+
+  await next()
+})

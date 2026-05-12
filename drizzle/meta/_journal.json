@@ -50,6 +50,13 @@
       "when": 1778526927052,
       "tag": "0006_wakeful_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1747009200000,
+      "tag": "0007_billing_plan",
+      "breakpoints": true
     }
   ]
 }

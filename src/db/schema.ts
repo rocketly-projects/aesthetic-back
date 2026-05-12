@@ -10,6 +10,13 @@ export const appointmentStatusEnum = pgEnum('appointment_status', [
   'no_show',
 ])
 
+export const planStatusEnum = pgEnum('plan_status', [
+  'active',
+  'inactive',
+  'cancelled',
+  'past_due',
+])
+
 export const userRoleEnum = pgEnum('user_role', ['owner', 'staff'])
 
 export const messageSenderEnum = pgEnum('message_sender', ['client', 'owner', 'bot'])
@@ -27,6 +34,11 @@ export const businesses = pgTable('businesses', {
   whatsappPhone: text('whatsapp_phone'),
   depositRequired: boolean('deposit_required').default(false).notNull(),
   depositPercent: integer('deposit_percent').default(0).notNull(),
+  // Billing
+  planId: text('plan_id'),                                          // 'basic' | 'pro'
+  planStatus: planStatusEnum('plan_status').default('inactive').notNull(),
+  subscriptionId: text('subscription_id'),                          // MP preapproval ID
+  subscriptionExpiresAt: timestamp('subscription_expires_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
