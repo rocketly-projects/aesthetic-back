@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { businesses } from '../db/schema'
+import { businesses, users } from '../db/schema'
 import { zv } from '../lib/validator'
 import { authMiddleware } from '../middleware/auth'
 import type { Bindings, Variables } from '../index'
@@ -14,29 +14,29 @@ const billingRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 export const PLANS = {
   basic: {
     id: 'basic',
-    name: 'Plan Básico',
+    name: 'Plan Basico',
     price: 30000,
     mpPlanId: '7a1d71983b844a6a8931bcbda5d9b028',
-    features: ['Gestión de turnos', 'Agenda', 'Clientes', 'Servicios', 'Perfil público'],
+    features: ['Gestion de turnos', 'Agenda', 'Clientes', 'Servicios', 'Perfil publico'],
   },
   pro: {
     id: 'pro',
     name: 'Plan Pro',
     price: 40000,
     mpPlanId: 'e87fcf98039748a1a2b37a8c07a06a76',
-    features: ['Todo el Plan Básico', 'Bot de WhatsApp', 'Respuestas automáticas 24/7'],
+    features: ['Todo el Plan Basico', 'Bot de WhatsApp', 'Respuestas automaticas 24/7'],
   },
 } as const
 
 export type PlanId = keyof typeof PLANS
 
-// ── GET /billing/plans — público, devuelve los planes disponibles ──────────────
+// ── GET /billing/plans ────────────────────────────────────────────────────────
 
 billingRoutes.get('/plans', (c) => {
   return c.json({ plans: Object.values(PLANS) })
 })
 
-// ── GET /billing/status — estado del plan del negocio autenticado ─────────────
+// ── GET /billing/status ───────────────────────────────────────────────────────
 
 billingRoutes.get('/status', authMiddleware, async (c) => {
   const db = createDb(c.env.DATABASE_URL)
@@ -66,7 +66,7 @@ billingRoutes.get('/status', authMiddleware, async (c) => {
   })
 })
 
-// ── POST /billing/subscribe — crea la suscripción en MP y devuelve el checkout ─
+// ── POST /billing/subscribe ───────────────────────────────────────────────────
 
 const subscribeSchema = z.object({
   planId: z.enum(['basic', 'pro']),
@@ -75,62 +75,76 @@ const subscribeSchema = z.object({
 billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
-  const email = c.get('email')
   const { planId } = c.req.valid('json')
 
   const plan = PLANS[planId]
 
-  // Fetch business info to use as payer data
-  const [business] = await db
-    .select({ name: businesses.name, id: businesses.id })
-    .from(businesses)
-    .where(eq(businesses.id, businessId))
-    .limit(1)
-
-  if (!business) return c.json({ error: 'Business not found' }, 404)
-
-  // Create preapproval (subscription instance) in MP
-  const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      preapproval_plan_id: plan.mpPlanId,
-      reason: plan.name,
-      external_reference: businessId,
-      payer_email: email,
-      back_url: `${c.env.FRONTEND_URL}/billing/success`,
-      status: 'pending',
-    }),
+  // Fetch the plan template from MP to get its init_point
+  const mpRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${plan.mpPlanId}`, {
+    headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
   })
 
   if (!mpRes.ok) {
     const err = await mpRes.json()
-    console.error('MP preapproval error:', err)
+    console.error('MP plan fetch error:', err)
     return c.json({ error: 'Error al iniciar el proceso de pago', detail: err }, 502)
   }
 
-  const mpData = await mpRes.json() as { id: string; init_point: string }
+  const mpPlan = await mpRes.json() as { id: string; init_point: string }
 
-  // Save pending subscription data
+  // Save selected plan
+  await db
+    .update(businesses)
+    .set({ planId, updatedAt: new Date() })
+    .where(eq(businesses.id, businessId))
+
+  const checkoutUrl = `${mpPlan.init_point}&back_url=${encodeURIComponent(`${c.env.FRONTEND_URL}/billing/success`)}`
+
+  return c.json({ checkoutUrl })
+})
+
+// ── POST /billing/confirm — llamado desde el front tras el checkout ────────────
+
+billingRoutes.post('/confirm', authMiddleware, async (c) => {
+  const db = createDb(c.env.DATABASE_URL)
+  const businessId = c.get('businessId')
+  const email = c.get('email')
+
+  const mpRes = await fetch(
+    `https://api.mercadopago.com/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`,
+    { headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` } }
+  )
+
+  if (!mpRes.ok) return c.json({ confirmed: false })
+
+  const mpData = await mpRes.json() as {
+    results: Array<{
+      id: string
+      status: string
+      preapproval_plan_id: string
+      next_payment_date?: string
+    }>
+  }
+
+  const knownPlanIds: string[] = Object.values(PLANS).map(p => p.mpPlanId)
+  const sub = mpData.results?.find(r => knownPlanIds.includes(r.preapproval_plan_id))
+
+  if (!sub) return c.json({ confirmed: false })
+
   await db
     .update(businesses)
     .set({
-      planId,
-      subscriptionId: mpData.id,
+      planStatus: 'active',
+      subscriptionId: sub.id,
+      subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
       updatedAt: new Date(),
     })
     .where(eq(businesses.id, businessId))
 
-  return c.json({
-    subscriptionId: mpData.id,
-    checkoutUrl: mpData.init_point,
-  })
+  return c.json({ confirmed: true })
 })
 
-// ── POST /billing/webhook — recibe eventos de MP ──────────────────────────────
+// ── POST /billing/webhook ─────────────────────────────────────────────────────
 
 billingRoutes.post('/webhook', async (c) => {
   const body = await c.req.json<{
@@ -138,7 +152,6 @@ billingRoutes.post('/webhook', async (c) => {
     data: { id: string }
   }>()
 
-  // Only handle subscription events
   if (body.type !== 'subscription_preapproval') {
     return c.json({ ok: true })
   }
@@ -146,7 +159,6 @@ billingRoutes.post('/webhook', async (c) => {
   const subscriptionId = body.data?.id
   if (!subscriptionId) return c.json({ ok: true })
 
-  // Fetch subscription details from MP
   const mpRes = await fetch(`https://api.mercadopago.com/preapproval/${subscriptionId}`, {
     headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
   })
@@ -156,16 +168,22 @@ billingRoutes.post('/webhook', async (c) => {
   const sub = await mpRes.json() as {
     id: string
     status: string
-    external_reference: string
+    payer_email?: string
     next_payment_date?: string
   }
 
-  const businessId = sub.external_reference
-  if (!businessId) return c.json({ ok: true })
+  if (!sub.payer_email) return c.json({ ok: true })
 
   const db = createDb(c.env.DATABASE_URL)
 
-  // Map MP status → our planStatus
+  const [user] = await db
+    .select({ businessId: users.businessId })
+    .from(users)
+    .where(eq(users.email, sub.payer_email))
+    .limit(1)
+
+  if (!user) return c.json({ ok: true })
+
   const planStatus =
     sub.status === 'authorized' ? 'active'
     : sub.status === 'paused'   ? 'past_due'
@@ -176,10 +194,11 @@ billingRoutes.post('/webhook', async (c) => {
     .update(businesses)
     .set({
       planStatus,
+      subscriptionId: sub.id,
       subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
       updatedAt: new Date(),
     })
-    .where(eq(businesses.id, businessId))
+    .where(eq(businesses.id, user.businessId))
 
   return c.json({ ok: true })
 })
