@@ -75,6 +75,7 @@ const subscribeSchema = z.object({
 billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
+  const email = c.get('email')
   const { planId } = c.req.valid('json')
 
   const plan = PLANS[planId]
@@ -99,6 +100,7 @@ billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) 
       preapproval_plan_id: plan.mpPlanId,
       reason: plan.name,
       external_reference: businessId,
+      payer_email: email,
       back_url: `${c.env.FRONTEND_URL}/billing/success`,
       status: 'pending',
     }),
