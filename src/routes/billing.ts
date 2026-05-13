@@ -75,50 +75,31 @@ const subscribeSchema = z.object({
 billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
-  const email = c.get('email')
   const { planId } = c.req.valid('json')
 
   const plan = PLANS[planId]
-  const backUrl = `${c.env.FRONTEND_URL}/billing/success`
 
-  // Create a standalone preapproval (without preapproval_plan_id) so we can set
-  // external_reference = businessId. This lets the webhook find the correct business.
-  const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      reason: plan.name,
-      external_reference: businessId,
-      payer_email: email,
-      back_url: backUrl,
-      auto_recurring: {
-        frequency: 1,
-        frequency_type: 'months',
-        transaction_amount: plan.price,
-        currency_id: 'ARS',
-      },
-      status: 'pending',
-    }),
+  const mpRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${plan.mpPlanId}`, {
+    headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
   })
 
   if (!mpRes.ok) {
     const err = await mpRes.json()
-    console.error('MP subscribe error:', err)
+    console.error('MP plan fetch error:', err)
     return c.json({ error: 'Error al iniciar el proceso de pago', detail: err }, 502)
   }
 
-  const mpPreapproval = await mpRes.json() as { id: string; init_point: string }
-  console.log('[subscribe] preapproval created:', mpPreapproval.id)
+  const mpPlan = await mpRes.json() as { id: string; init_point: string }
 
   await db
     .update(businesses)
-    .set({ planId, subscriptionId: mpPreapproval.id, updatedAt: new Date() })
+    .set({ planId, updatedAt: new Date() })
     .where(eq(businesses.id, businessId))
 
-  return c.json({ checkoutUrl: mpPreapproval.init_point })
+  const backUrl = `${c.env.FRONTEND_URL}/billing/success`
+  const checkoutUrl = `${mpPlan.init_point}&back_url=${encodeURIComponent(backUrl)}`
+
+  return c.json({ checkoutUrl })
 })
 
 // ── POST /billing/confirm — llamado desde el front tras el checkout ────────────

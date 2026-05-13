@@ -38,8 +38,7 @@ app.use(
   cors({
     origin: (origin, c) => {
       const allowed = [c.env.FRONTEND_URL, 'http://localhost:3000'].filter(Boolean)
-      console.log('[cors] origin:', origin, '| FRONTEND_URL:', c.env.FRONTEND_URL, '| match:', allowed.includes(origin))
-      return allowed.includes(origin) ? origin : null
+return allowed.includes(origin) ? origin : null
     },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
