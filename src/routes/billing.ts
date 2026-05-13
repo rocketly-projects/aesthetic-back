@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { businesses } from '../db/schema'
+import { businesses, users } from '../db/schema'
 import { zv } from '../lib/validator'
 import { authMiddleware } from '../middleware/auth'
 import type { Bindings, Variables } from '../index'
@@ -75,34 +75,45 @@ const subscribeSchema = z.object({
 billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
+  const email = c.get('email')
   const { planId } = c.req.valid('json')
 
   const plan = PLANS[planId]
+  const backUrl = `${c.env.FRONTEND_URL}/billing/success`
 
-  // Fetch the plan template to get its init_point
-  const mpRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${plan.mpPlanId}`, {
-    headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
+  // Create a preapproval instance so we can set external_reference = businessId.
+  // This lets the webhook find the correct business regardless of the payer's email.
+  const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      preapproval_plan_id: plan.mpPlanId,
+      payer_email: email,
+      back_url: backUrl,
+      external_reference: businessId,
+      reason: plan.name,
+    }),
   })
 
   if (!mpRes.ok) {
     const err = await mpRes.json()
-    console.error('MP plan fetch error:', err)
+    console.error('MP subscribe error:', err)
     return c.json({ error: 'Error al iniciar el proceso de pago', detail: err }, 502)
   }
 
-  const mpPlan = await mpRes.json() as { id: string; init_point: string }
+  const mpPreapproval = await mpRes.json() as { id: string; init_point: string }
+  console.log('[subscribe] created preapproval:', mpPreapproval.id, 'init_point:', mpPreapproval.init_point)
 
-  // Save selected plan
+  // Save selected plan and preapproval ID
   await db
     .update(businesses)
-    .set({ planId, updatedAt: new Date() })
+    .set({ planId, subscriptionId: mpPreapproval.id, updatedAt: new Date() })
     .where(eq(businesses.id, businessId))
 
-  // Append back_url and external_reference (businessId) to the checkout URL
-  const backUrl = `${c.env.FRONTEND_URL}/billing/success`
-  const checkoutUrl = `${mpPlan.init_point}&back_url=${encodeURIComponent(backUrl)}&external_reference=${businessId}`
-
-  return c.json({ checkoutUrl })
+  return c.json({ checkoutUrl: mpPreapproval.init_point })
 })
 
 // ── POST /billing/confirm — llamado desde el front tras el checkout ────────────
@@ -189,27 +200,42 @@ billingRoutes.post('/webhook', async (c) => {
     : sub.status === 'cancelled' ? 'cancelled'
     : 'inactive'
 
-  // Prefer external_reference (businessId) for lookup; fall back to subscriptionId already stored
+  const updatePayload = {
+    planStatus,
+    subscriptionId: sub.id,
+    subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
+    updatedAt: new Date(),
+  }
+
+  // 1. Prefer external_reference (businessId) — set when user pays via our checkout
   if (sub.external_reference) {
-    await db
-      .update(businesses)
-      .set({
-        planStatus,
-        subscriptionId: sub.id,
-        subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(businesses.id, sub.external_reference))
-  } else {
-    // Fallback: find business that already has this subscriptionId stored
-    await db
-      .update(businesses)
-      .set({
-        planStatus,
-        subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
-        updatedAt: new Date(),
-      })
-      .where(eq(businesses.subscriptionId, sub.id))
+    await db.update(businesses).set(updatePayload).where(eq(businesses.id, sub.external_reference))
+    return c.json({ ok: true })
+  }
+
+  // 2. Fallback: match by subscriptionId already stored (set by /billing/confirm)
+  const [existing] = await db
+    .select({ id: businesses.id })
+    .from(businesses)
+    .where(eq(businesses.subscriptionId, sub.id))
+    .limit(1)
+
+  if (existing) {
+    await db.update(businesses).set(updatePayload).where(eq(businesses.id, existing.id))
+    return c.json({ ok: true })
+  }
+
+  // 3. Last resort: look up by payer_email (works in production where emails match)
+  if (sub.payer_email) {
+    const [user] = await db
+      .select({ businessId: users.businessId })
+      .from(users)
+      .where(eq(users.email, sub.payer_email))
+      .limit(1)
+
+    if (user) {
+      await db.update(businesses).set(updatePayload).where(eq(businesses.id, user.businessId))
+    }
   }
 
   return c.json({ ok: true })
