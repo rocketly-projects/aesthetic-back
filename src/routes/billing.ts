@@ -152,7 +152,10 @@ billingRoutes.post('/webhook', async (c) => {
     data: { id: string }
   }>()
 
+  console.log('[webhook] received:', JSON.stringify(body))
+
   if (body.type !== 'subscription_preapproval') {
+    console.log('[webhook] ignoring type:', body.type)
     return c.json({ ok: true })
   }
 
