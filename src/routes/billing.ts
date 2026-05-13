@@ -16,14 +16,14 @@ export const PLANS = {
     id: 'basic',
     name: 'Plan Basico',
     price: 30000,
-    mpPlanId: '7a1d71983b844a6a8931bcbda5d9b028',
+    mpPlanId: '1da6e1fd943142779b655e2eb8ea0aa5',
     features: ['Gestion de turnos', 'Agenda', 'Clientes', 'Servicios', 'Perfil publico'],
   },
   pro: {
     id: 'pro',
     name: 'Plan Pro',
     price: 40000,
-    mpPlanId: 'e87fcf98039748a1a2b37a8c07a06a76',
+    mpPlanId: '2966c3b9c83a4b87b07cc7731856a54b',
     features: ['Todo el Plan Basico', 'Bot de WhatsApp', 'Respuestas automaticas 24/7'],
   },
 } as const
