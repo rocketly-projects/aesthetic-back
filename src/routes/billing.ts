@@ -81,8 +81,8 @@ billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) 
   const plan = PLANS[planId]
   const backUrl = `${c.env.FRONTEND_URL}/billing/success`
 
-  // Create a preapproval instance so we can set external_reference = businessId.
-  // This lets the webhook find the correct business regardless of the payer's email.
+  // Create a standalone preapproval (without preapproval_plan_id) so we can set
+  // external_reference = businessId. This lets the webhook find the correct business.
   const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
     method: 'POST',
     headers: {
@@ -90,11 +90,17 @@ billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      preapproval_plan_id: plan.mpPlanId,
+      reason: plan.name,
+      external_reference: businessId,
       payer_email: email,
       back_url: backUrl,
-      external_reference: businessId,
-      reason: plan.name,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: 'months',
+        transaction_amount: plan.price,
+        currency_id: 'ARS',
+      },
+      status: 'pending',
     }),
   })
 
@@ -105,9 +111,8 @@ billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) 
   }
 
   const mpPreapproval = await mpRes.json() as { id: string; init_point: string }
-  console.log('[subscribe] created preapproval:', mpPreapproval.id, 'init_point:', mpPreapproval.init_point)
+  console.log('[subscribe] preapproval created:', mpPreapproval.id)
 
-  // Save selected plan and preapproval ID
   await db
     .update(businesses)
     .set({ planId, subscriptionId: mpPreapproval.id, updatedAt: new Date() })
