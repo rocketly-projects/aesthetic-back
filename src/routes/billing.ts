@@ -75,43 +75,34 @@ const subscribeSchema = z.object({
 billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
-  const email = c.get('email')
   const { planId } = c.req.valid('json')
 
   const plan = PLANS[planId]
 
-  // Create a preapproval instance with external_reference = businessId
-  const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      preapproval_plan_id: plan.mpPlanId,
-      payer_email: email,
-      back_url: `${c.env.FRONTEND_URL}/billing/success`,
-      external_reference: businessId,
-      reason: plan.name,
-      status: 'pending',
-    }),
+  // Fetch the plan template to get its init_point
+  const mpRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${plan.mpPlanId}`, {
+    headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
   })
 
   if (!mpRes.ok) {
     const err = await mpRes.json()
-    console.error('MP subscribe error:', err)
+    console.error('MP plan fetch error:', err)
     return c.json({ error: 'Error al iniciar el proceso de pago', detail: err }, 502)
   }
 
-  const mpPreapproval = await mpRes.json() as { id: string; init_point: string }
+  const mpPlan = await mpRes.json() as { id: string; init_point: string }
 
-  // Save selected plan and the preapproval ID
+  // Save selected plan
   await db
     .update(businesses)
-    .set({ planId, subscriptionId: mpPreapproval.id, updatedAt: new Date() })
+    .set({ planId, updatedAt: new Date() })
     .where(eq(businesses.id, businessId))
 
-  return c.json({ checkoutUrl: mpPreapproval.init_point })
+  // Append back_url and external_reference (businessId) to the checkout URL
+  const backUrl = `${c.env.FRONTEND_URL}/billing/success`
+  const checkoutUrl = `${mpPlan.init_point}&back_url=${encodeURIComponent(backUrl)}&external_reference=${businessId}`
+
+  return c.json({ checkoutUrl })
 })
 
 // ── POST /billing/confirm — llamado desde el front tras el checkout ────────────
@@ -120,17 +111,14 @@ billingRoutes.post('/confirm', authMiddleware, async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
 
-  // Get the subscriptionId we stored when the user initiated checkout
-  const [business] = await db
-    .select({ subscriptionId: businesses.subscriptionId })
-    .from(businesses)
-    .where(eq(businesses.id, businessId))
-    .limit(1)
+  // preapproval_id is sent by the frontend after MP redirects back
+  const body = await c.req.json<{ preapprovalId?: string }>().catch(() => ({}))
+  const preapprovalId = body.preapprovalId
 
-  if (!business?.subscriptionId) return c.json({ confirmed: false })
+  if (!preapprovalId) return c.json({ confirmed: false })
 
   const mpRes = await fetch(
-    `https://api.mercadopago.com/preapproval/${business.subscriptionId}`,
+    `https://api.mercadopago.com/preapproval/${preapprovalId}`,
     { headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` } }
   )
 
@@ -142,12 +130,15 @@ billingRoutes.post('/confirm', authMiddleware, async (c) => {
     next_payment_date?: string
   }
 
+  console.log('[confirm] preapproval status:', sub.status)
+
   if (sub.status !== 'authorized') return c.json({ confirmed: false })
 
   await db
     .update(businesses)
     .set({
       planStatus: 'active',
+      subscriptionId: sub.id,
       subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
       updatedAt: new Date(),
     })
@@ -183,13 +174,12 @@ billingRoutes.post('/webhook', async (c) => {
   const sub = await mpRes.json() as {
     id: string
     status: string
+    payer_email?: string
     external_reference?: string
     next_payment_date?: string
   }
 
-  console.log('[webhook] sub status:', sub.status, 'external_reference:', sub.external_reference)
-
-  if (!sub.external_reference) return c.json({ ok: true })
+  console.log('[webhook] sub status:', sub.status, 'external_reference:', sub.external_reference, 'payer_email:', sub.payer_email)
 
   const db = createDb(c.env.DATABASE_URL)
 
@@ -199,15 +189,28 @@ billingRoutes.post('/webhook', async (c) => {
     : sub.status === 'cancelled' ? 'cancelled'
     : 'inactive'
 
-  await db
-    .update(businesses)
-    .set({
-      planStatus,
-      subscriptionId: sub.id,
-      subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(businesses.id, sub.external_reference))
+  // Prefer external_reference (businessId) for lookup; fall back to subscriptionId already stored
+  if (sub.external_reference) {
+    await db
+      .update(businesses)
+      .set({
+        planStatus,
+        subscriptionId: sub.id,
+        subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(businesses.id, sub.external_reference))
+  } else {
+    // Fallback: find business that already has this subscriptionId stored
+    await db
+      .update(businesses)
+      .set({
+        planStatus,
+        subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(businesses.subscriptionId, sub.id))
+  }
 
   return c.json({ ok: true })
 })
