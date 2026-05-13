@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { businesses, users } from '../db/schema'
+import { businesses } from '../db/schema'
 import { zv } from '../lib/validator'
 import { authMiddleware } from '../middleware/auth'
 import type { Bindings, Variables } from '../index'
@@ -75,32 +75,43 @@ const subscribeSchema = z.object({
 billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
+  const email = c.get('email')
   const { planId } = c.req.valid('json')
 
   const plan = PLANS[planId]
 
-  // Fetch the plan template from MP to get its init_point
-  const mpRes = await fetch(`https://api.mercadopago.com/preapproval_plan/${plan.mpPlanId}`, {
-    headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
+  // Create a preapproval instance with external_reference = businessId
+  const mpRes = await fetch('https://api.mercadopago.com/preapproval', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      preapproval_plan_id: plan.mpPlanId,
+      payer_email: email,
+      back_url: `${c.env.FRONTEND_URL}/billing/success`,
+      external_reference: businessId,
+      reason: plan.name,
+      status: 'pending',
+    }),
   })
 
   if (!mpRes.ok) {
     const err = await mpRes.json()
-    console.error('MP plan fetch error:', err)
+    console.error('MP subscribe error:', err)
     return c.json({ error: 'Error al iniciar el proceso de pago', detail: err }, 502)
   }
 
-  const mpPlan = await mpRes.json() as { id: string; init_point: string }
+  const mpPreapproval = await mpRes.json() as { id: string; init_point: string }
 
-  // Save selected plan
+  // Save selected plan and the preapproval ID
   await db
     .update(businesses)
-    .set({ planId, updatedAt: new Date() })
+    .set({ planId, subscriptionId: mpPreapproval.id, updatedAt: new Date() })
     .where(eq(businesses.id, businessId))
 
-  const checkoutUrl = `${mpPlan.init_point}&back_url=${encodeURIComponent(`${c.env.FRONTEND_URL}/billing/success`)}`
-
-  return c.json({ checkoutUrl })
+  return c.json({ checkoutUrl: mpPreapproval.init_point })
 })
 
 // ── POST /billing/confirm — llamado desde el front tras el checkout ────────────
@@ -108,34 +119,35 @@ billingRoutes.post('/subscribe', authMiddleware, zv(subscribeSchema), async (c) 
 billingRoutes.post('/confirm', authMiddleware, async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
-  const email = c.get('email')
+
+  // Get the subscriptionId we stored when the user initiated checkout
+  const [business] = await db
+    .select({ subscriptionId: businesses.subscriptionId })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1)
+
+  if (!business?.subscriptionId) return c.json({ confirmed: false })
 
   const mpRes = await fetch(
-    `https://api.mercadopago.com/preapproval/search?payer_email=${encodeURIComponent(email)}&status=authorized`,
+    `https://api.mercadopago.com/preapproval/${business.subscriptionId}`,
     { headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` } }
   )
 
   if (!mpRes.ok) return c.json({ confirmed: false })
 
-  const mpData = await mpRes.json() as {
-    results: Array<{
-      id: string
-      status: string
-      preapproval_plan_id: string
-      next_payment_date?: string
-    }>
+  const sub = await mpRes.json() as {
+    id: string
+    status: string
+    next_payment_date?: string
   }
 
-  const knownPlanIds: string[] = Object.values(PLANS).map(p => p.mpPlanId)
-  const sub = mpData.results?.find(r => knownPlanIds.includes(r.preapproval_plan_id))
-
-  if (!sub) return c.json({ confirmed: false })
+  if (sub.status !== 'authorized') return c.json({ confirmed: false })
 
   await db
     .update(businesses)
     .set({
       planStatus: 'active',
-      subscriptionId: sub.id,
       subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
       updatedAt: new Date(),
     })
@@ -171,21 +183,15 @@ billingRoutes.post('/webhook', async (c) => {
   const sub = await mpRes.json() as {
     id: string
     status: string
-    payer_email?: string
+    external_reference?: string
     next_payment_date?: string
   }
 
-  if (!sub.payer_email) return c.json({ ok: true })
+  console.log('[webhook] sub status:', sub.status, 'external_reference:', sub.external_reference)
+
+  if (!sub.external_reference) return c.json({ ok: true })
 
   const db = createDb(c.env.DATABASE_URL)
-
-  const [user] = await db
-    .select({ businessId: users.businessId })
-    .from(users)
-    .where(eq(users.email, sub.payer_email))
-    .limit(1)
-
-  if (!user) return c.json({ ok: true })
 
   const planStatus =
     sub.status === 'authorized' ? 'active'
@@ -201,7 +207,7 @@ billingRoutes.post('/webhook', async (c) => {
       subscriptionExpiresAt: sub.next_payment_date ? new Date(sub.next_payment_date) : null,
       updatedAt: new Date(),
     })
-    .where(eq(businesses.id, user.businessId))
+    .where(eq(businesses.id, sub.external_reference))
 
   return c.json({ ok: true })
 })
