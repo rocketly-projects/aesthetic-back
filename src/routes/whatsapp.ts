@@ -124,14 +124,27 @@ whatsappRoutes.patch('/chats/:id', zv(updateChatSchema), async (c) => {
   const id = c.req.param('id')
   const { isBot, markRead, clientName, clientId } = c.req.valid('json')
 
+  const updates = {
+    ...(isBot      !== undefined ? { isBot }      : {}),
+    ...(markRead               ? { unread: 0 }   : {}),
+    ...(clientName != null     ? { clientName }  : {}),
+    ...(clientId   != null     ? { clientId }    : {}),
+  }
+
+  // Drizzle no admite .set({}) vacío — si no hay nada que actualizar, devolver el chat existente
+  if (Object.keys(updates).length === 0) {
+    const [chat] = await db
+      .select()
+      .from(whatsappChats)
+      .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
+      .limit(1)
+    if (!chat) return c.json({ error: 'Chat not found' }, 404)
+    return c.json({ chat })
+  }
+
   const [updated] = await db
     .update(whatsappChats)
-    .set({
-      ...(isBot      !== undefined ? { isBot }      : {}),
-      ...(markRead               ? { unread: 0 }   : {}),
-      ...(clientName != null     ? { clientName }  : {}),
-      ...(clientId   != null     ? { clientId }    : {}),
-    })
+    .set(updates)
     .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
     .returning()
 
