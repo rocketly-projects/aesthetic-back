@@ -122,6 +122,7 @@ export const whatsappChats = pgTable('whatsapp_chats', {
   businessId: uuid('business_id')
     .notNull()
     .references(() => businesses.id, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
   clientPhone: text('client_phone').notNull(),
   clientName: text('client_name'),
   isBot: boolean('is_bot').default(true).notNull(),
@@ -184,6 +185,7 @@ export const appointmentsRelations = relations(appointments, ({ one }) => ({
 
 export const whatsappChatsRelations = relations(whatsappChats, ({ one, many }) => ({
   business: one(businesses, { fields: [whatsappChats.businessId], references: [businesses.id] }),
+  client:   one(clients,    { fields: [whatsappChats.clientId],   references: [clients.id] }),
   messages: many(whatsappMessages),
 }))
 

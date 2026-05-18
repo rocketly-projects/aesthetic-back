@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { whatsappChats, whatsappMessages } from '../db/schema'
+import { whatsappChats, whatsappMessages, clients } from '../db/schema'
 import { zv, zvQuery } from '../lib/validator'
 import { requireJwt } from '../middleware/botAuth'
 import type { Bindings, Variables } from '../index'
@@ -47,6 +47,15 @@ whatsappRoutes.post('/chats', zv(createChatSchema), async (c) => {
   const businessId = c.get('businessId')
   const { clientPhone, clientName } = c.req.valid('json')
 
+  // Helper: buscar cliente por teléfono
+  const findClient = () =>
+    db
+      .select()
+      .from(clients)
+      .where(and(eq(clients.businessId, businessId), eq(clients.phone, clientPhone)))
+      .limit(1)
+      .then(([r]) => r ?? null)
+
   // Return existing chat if one already exists for this phone
   const [existing] = await db
     .select()
@@ -59,11 +68,33 @@ whatsappRoutes.post('/chats', zv(createChatSchema), async (c) => {
     )
     .limit(1)
 
-  if (existing) return c.json({ chat: existing })
+  if (existing) {
+    // Auto-linkear clientId si todavía no está vinculado
+    if (!existing.clientId) {
+      const matched = await findClient()
+      if (matched) {
+        const [updated] = await db
+          .update(whatsappChats)
+          .set({ clientId: matched.id, clientName: clientName ?? matched.name })
+          .where(eq(whatsappChats.id, existing.id))
+          .returning()
+        return c.json({ chat: updated })
+      }
+    }
+    return c.json({ chat: existing })
+  }
+
+  // Nuevo chat — intentar auto-linkear por teléfono
+  const matched = await findClient()
 
   const [chat] = await db
     .insert(whatsappChats)
-    .values({ businessId, clientPhone, clientName })
+    .values({
+      businessId,
+      clientPhone,
+      clientName: clientName ?? matched?.name ?? null,
+      clientId:   matched?.id ?? null,
+    })
     .returning()
 
   return c.json({ chat }, 201)
