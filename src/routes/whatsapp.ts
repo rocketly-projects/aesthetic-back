@@ -118,7 +118,7 @@ whatsappRoutes.get('/chats/:id', requireJwt, async (c) => {
   return c.json({ chat })
 })
 
-whatsappRoutes.patch('/chats/:id', requireJwt, zv(updateChatSchema), async (c) => {
+whatsappRoutes.patch('/chats/:id', zv(updateChatSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
   const id = c.req.param('id')
