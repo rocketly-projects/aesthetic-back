@@ -11,12 +11,14 @@ const whatsappRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
 const createChatSchema = z.object({
   clientPhone: z.string().min(1),
-  clientName: z.string().optional(),
+  clientName: z.string().optional().nullable(),
 })
 
 const updateChatSchema = z.object({
-  isBot: z.boolean().optional(),
-  markRead: z.boolean().optional(),
+  isBot:      z.boolean().optional(),
+  markRead:   z.boolean().optional(),
+  clientName: z.string().min(1).optional().nullable(),
+  clientId:   z.string().uuid().optional().nullable(),
 })
 
 const sendMessageSchema = z.object({
@@ -120,13 +122,15 @@ whatsappRoutes.patch('/chats/:id', requireJwt, zv(updateChatSchema), async (c) =
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
   const id = c.req.param('id')
-  const { isBot, markRead } = c.req.valid('json')
+  const { isBot, markRead, clientName, clientId } = c.req.valid('json')
 
   const [updated] = await db
     .update(whatsappChats)
     .set({
-      ...(isBot !== undefined ? { isBot } : {}),
-      ...(markRead ? { unread: 0 } : {}),
+      ...(isBot      !== undefined ? { isBot }      : {}),
+      ...(markRead               ? { unread: 0 }   : {}),
+      ...(clientName != null     ? { clientName }  : {}),
+      ...(clientId   != null     ? { clientId }    : {}),
     })
     .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
     .returning()
