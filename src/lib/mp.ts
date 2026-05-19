@@ -62,11 +62,11 @@ export async function createMpPreference(
     throw new Error(`MP preference error: ${res.status} — ${err}`)
   }
 
-  const data = await res.json() as { id: string; init_point: string }
+  const data = await res.json() as { id: string; init_point: string; sandbox_init_point?: string }
 
   return {
     preferenceId:  data.id,
-    initPoint:     data.init_point,
+    initPoint:     data.sandbox_init_point ?? data.init_point,
     depositAmount,
   }
 }
