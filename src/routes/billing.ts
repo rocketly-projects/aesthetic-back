@@ -474,6 +474,7 @@ billingRoutes.get('/mp/callback', async (c) => {
     body: JSON.stringify({
       grant_type:    'authorization_code',
       client_id:     c.env.MP_CLIENT_ID,
+      client_secret: c.env.MP_CLIENT_SECRET,
       code,
       redirect_uri:  `${backendBase}/billing/mp/callback`,
       code_verifier: codeVerifier,
