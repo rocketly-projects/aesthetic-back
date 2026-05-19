@@ -393,7 +393,6 @@ billingRoutes.get('/mp/connect', authMiddleware, async (c) => {
   const params = new URLSearchParams({
     client_id:     c.env.MP_CLIENT_ID,
     response_type: 'code',
-    platform_id:   'mp',
     redirect_uri:  `${backendBase}/billing/mp/callback`,
     state:         businessId,
   })
@@ -428,6 +427,7 @@ billingRoutes.get('/mp/callback', async (c) => {
       client_secret: c.env.MP_CLIENT_SECRET,
       code,
       redirect_uri:  `${backendBase}/billing/mp/callback`,
+      test_token:    'true',
     }),
   })
 
