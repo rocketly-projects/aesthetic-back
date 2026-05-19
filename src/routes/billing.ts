@@ -383,6 +383,43 @@ billingRoutes.post('/appointments/expire', async (c) => {
   return c.json({ cancelled: expired.length })
 })
 
+// ── PKCE helpers ─────────────────────────────────────────────────────────────
+
+function base64url(buffer: Uint8Array): string {
+  const base64 = btoa(String.fromCharCode(...buffer))
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return base64url(array)
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const data = new TextEncoder().encode(verifier)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return base64url(new Uint8Array(digest))
+}
+
+// state = base64url( JSON({ businessId, codeVerifier }) )
+function encodeState(businessId: string, codeVerifier: string): string {
+  const json = JSON.stringify({ b: businessId, v: codeVerifier })
+  return btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+function decodeState(state: string): { businessId: string; codeVerifier: string } | null {
+  try {
+    const padded = state.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice((state.length * 6) % 8 === 0 ? 0 : (8 - (state.length * 6) % 8) / 2)
+    const json = atob(padded)
+    const { b, v } = JSON.parse(json)
+    if (!b || !v) return null
+    return { businessId: b, codeVerifier: v }
+  } catch {
+    return null
+  }
+}
+
 // ── GET /billing/mp/connect ───────────────────────────────────────────────────
 // Devuelve la URL de autorización de MP para que el frontend redirija
 
@@ -390,11 +427,16 @@ billingRoutes.get('/mp/connect', authMiddleware, async (c) => {
   const businessId  = c.get('businessId')
   const backendBase = new URL(c.req.url).origin
 
+  const codeVerifier  = generateCodeVerifier()
+  const codeChallenge = await generateCodeChallenge(codeVerifier)
+
   const params = new URLSearchParams({
-    client_id:     c.env.MP_CLIENT_ID,
-    response_type: 'code',
-    redirect_uri:  `${backendBase}/billing/mp/callback`,
-    state:         businessId,
+    client_id:             c.env.MP_CLIENT_ID,
+    response_type:         'code',
+    redirect_uri:          `${backendBase}/billing/mp/callback`,
+    code_challenge:        codeChallenge,
+    code_challenge_method: 'S256',
+    state:                 encodeState(businessId, codeVerifier),
   })
 
   return c.json({
@@ -406,17 +448,25 @@ billingRoutes.get('/mp/connect', authMiddleware, async (c) => {
 // MP redirige aquí tras la autorización del owner
 
 billingRoutes.get('/mp/callback', async (c) => {
-  const code       = c.req.query('code')
-  const businessId = c.req.query('state')
-  const error      = c.req.query('error')
+  const code      = c.req.query('code')
+  const rawState  = c.req.query('state')
+  const error     = c.req.query('error')
 
   const frontendUrl = c.env.FRONTEND_URL
 
-  if (error || !code || !businessId) {
+  if (error || !code || !rawState) {
     return c.redirect(`${frontendUrl}/negocio?mp=error`)
   }
 
-  // Intercambiar código por tokens
+  const decoded = decodeState(rawState)
+  if (!decoded) {
+    console.error('[mp/callback] invalid state:', rawState)
+    return c.redirect(`${frontendUrl}/negocio?mp=error`)
+  }
+
+  const { businessId, codeVerifier } = decoded
+
+  // Intercambiar código por tokens usando PKCE (sin client_secret)
   const backendBase = new URL(c.req.url).origin
   const res = await fetch(MP_TOKEN_URL, {
     method: 'POST',
@@ -424,10 +474,9 @@ billingRoutes.get('/mp/callback', async (c) => {
     body: JSON.stringify({
       grant_type:    'authorization_code',
       client_id:     c.env.MP_CLIENT_ID,
-      client_secret: c.env.MP_CLIENT_SECRET,
       code,
       redirect_uri:  `${backendBase}/billing/mp/callback`,
-      test_token:    'true',
+      code_verifier: codeVerifier,
     }),
   })
 
