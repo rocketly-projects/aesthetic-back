@@ -42,16 +42,15 @@ export async function refreshMpToken(
     return current?.mpAccessToken ?? null
   }
 
-  const refreshParams = new URLSearchParams({
-    grant_type:    'refresh_token',
-    client_id:     clientId,
-    client_secret: clientSecret,
-    refresh_token: biz.mpRefreshToken,
-  })
   const res = await fetch(MP_TOKEN_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: refreshParams.toString(),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'refresh_token',
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: biz.mpRefreshToken,
+    }),
   })
 
   if (!res.ok) return null
@@ -467,20 +466,18 @@ billingRoutes.get('/mp/callback', async (c) => {
 
   const { businessId, codeVerifier } = decoded
 
-  // Intercambiar código por tokens usando PKCE
+  // Intercambiar código por tokens usando PKCE (sin client_secret)
   const backendBase = new URL(c.req.url).origin
-  const tokenParams = new URLSearchParams({
-    grant_type:    'authorization_code',
-    client_id:     c.env.MP_CLIENT_ID,
-    client_secret: c.env.MP_CLIENT_SECRET,
-    code,
-    redirect_uri:  `${backendBase}/billing/mp/callback`,
-    code_verifier: codeVerifier,
-  })
   const res = await fetch(MP_TOKEN_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: tokenParams.toString(),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type:    'authorization_code',
+      client_id:     c.env.MP_CLIENT_ID,
+      code,
+      redirect_uri:  `${backendBase}/billing/mp/callback`,
+      code_verifier: codeVerifier,
+    }),
   })
 
   if (!res.ok) {

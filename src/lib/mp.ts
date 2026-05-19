@@ -41,7 +41,6 @@ export async function createMpPreference(
       failure: `${input.frontendUrl}/reserva/fallida`,
       pending: `${input.frontendUrl}/reserva/pendiente`,
     },
-    auto_return:          'approved',
     notification_url:     `${input.backendUrl}/billing/deposit-webhook`,
     external_reference:   input.appointmentId,
     expiration_date_from: new Date().toISOString(),
