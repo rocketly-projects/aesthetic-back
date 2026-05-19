@@ -2,10 +2,13 @@ import { Hono } from 'hono'
 import { eq, and, asc, sql, getTableColumns } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { appointments, clients, services, businessHours } from '../db/schema'
+import { appointments, clients, services, businessHours, businesses } from '../db/schema'
 import { zv, zvQuery } from '../lib/validator'
 import { requireJwt } from '../middleware/botAuth'
+import { createMpPreference } from '../lib/mp'
 import type { Bindings, Variables } from '../index'
+
+const ALL_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show', 'awaiting_payment'] as const
 
 const appointmentRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
@@ -18,9 +21,7 @@ const createAppointmentSchema = z.object({
 })
 
 const updateAppointmentSchema = z.object({
-  status: z
-    .enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show'])
-    .optional(),
+  status: z.enum(ALL_STATUSES).optional(),
   notes: z.string().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -29,7 +30,7 @@ const updateAppointmentSchema = z.object({
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  status: z.enum(['pending', 'confirmed', 'completed', 'cancelled', 'no_show']).optional(),
+  status: z.enum(ALL_STATUSES).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   clientId: z.string().uuid().optional(),
 })
@@ -134,7 +135,8 @@ appointmentRoutes.get('/', requireJwt, zvQuery(listQuerySchema), async (c) => {
 
 appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
-  const businessId = c.get('businessId')
+  const businessId  = c.get('businessId')
+  const authSource  = c.get('authSource')   // 'jwt' = owner, 'bot' = chatbot
   const { clientId, serviceId, date, time, notes } = c.req.valid('json')
 
   const [service] = await db
@@ -145,6 +147,27 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
 
   if (!service) return c.json({ error: 'Service not found' }, 404)
 
+  // El owner siempre confirma directamente; el bot respeta botDepositRequired
+  let needsDeposit = false
+  let mpAccessToken: string | null = null
+  let depositPercent = 0
+
+  if (authSource === 'bot') {
+    const [biz] = await db
+      .select({ botDepositRequired: businesses.botDepositRequired, depositPercent: businesses.depositPercent, mpAccessToken: businesses.mpAccessToken })
+      .from(businesses)
+      .where(eq(businesses.id, businessId))
+      .limit(1)
+
+    if (biz?.botDepositRequired && biz.mpAccessToken) {
+      needsDeposit  = true
+      mpAccessToken = biz.mpAccessToken
+      depositPercent = biz.depositPercent
+    }
+  }
+
+  const paymentExpiresAt = needsDeposit ? new Date(Date.now() + 30 * 60 * 1000) : null
+
   const [appointment] = await db
     .insert(appointments)
     .values({
@@ -152,15 +175,51 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
       clientId,
       serviceId,
       serviceName: service.name,
-      duration: service.duration,
-      price: service.price,
+      duration:    service.duration,
+      price:       service.price,
       date,
       time,
       notes,
+      status:          needsDeposit ? 'awaiting_payment' : 'confirmed',
+      paymentExpiresAt,
     })
     .returning()
 
-  return c.json({ appointment }, 201)
+  // Si requiere depósito, crear preferencia MP y actualizar el turno
+  if (needsDeposit && mpAccessToken) {
+    try {
+      const backendUrl = new URL(c.req.url).origin
+      const { preferenceId, initPoint, depositAmount } = await createMpPreference({
+        businessId,
+        appointmentId: appointment.id,
+        serviceName:   service.name,
+        price:         service.price,
+        depositPercent,
+        mpAccessToken,
+        frontendUrl:   c.env.FRONTEND_URL,
+        backendUrl,
+      })
+
+      await db
+        .update(appointments)
+        .set({ mpPreferenceId: preferenceId, updatedAt: new Date() })
+        .where(eq(appointments.id, appointment.id))
+
+      return c.json({
+        appointment: { ...appointment, status: 'awaiting_payment' as const },
+        deposit: { required: true, percent: depositPercent, amount: depositAmount, initPoint, expiresAt: paymentExpiresAt },
+      }, 201)
+    } catch (err) {
+      // Si MP falla, confirmar de todas formas
+      console.error('[appointments/post] MP error:', err)
+      await db.update(appointments).set({ status: 'confirmed', paymentExpiresAt: null, updatedAt: new Date() }).where(eq(appointments.id, appointment.id))
+    }
+  }
+
+  return c.json({
+    appointment,
+    deposit: { required: false, percent: 0, amount: 0, initPoint: null, expiresAt: null },
+  }, 201)
 })
 
 appointmentRoutes.get('/:id', requireJwt, async (c) => {

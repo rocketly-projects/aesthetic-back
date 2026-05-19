@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createDb } from '../lib/db'
 import { businesses, businessHours, services, appointments, clients } from '../db/schema'
 import { zv, zvQuery } from '../lib/validator'
+import { createMpPreference } from '../lib/mp'
 import type { Bindings, Variables } from '../index'
 import { BusinessError } from '../index'
 
@@ -56,7 +57,7 @@ publicRoutes.get('/:slug', async (c) => {
       phone: business.phone,
       instagram: business.instagram,
       logoUrl: business.logoUrl,
-      depositRequired: business.depositRequired,
+      webDepositRequired: business.webDepositRequired,
       depositPercent: business.depositPercent,
     },
     hours: hours.map((h) => ({
@@ -228,6 +229,9 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
         .returning()
     }
 
+    const needsDeposit = business.webDepositRequired && !!business.mpAccessToken
+    const paymentExpiresAt = needsDeposit ? new Date(Date.now() + 30 * 60 * 1000) : null
+
     const [appt] = await tx
       .insert(appointments)
       .values({
@@ -239,31 +243,80 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
         price: service.price,
         date,
         time,
-        status: 'pending',
+        status: needsDeposit ? 'awaiting_payment' : 'confirmed',
+        paymentExpiresAt,
       })
       .returning()
 
     return appt
   })
 
-  const depositAmount = business.depositRequired
-    ? Math.round((appointment.price * business.depositPercent) / 100)
-    : 0
+  // Si requiere depósito y MP está conectado, crear preferencia de pago
+  if (business.webDepositRequired && business.mpAccessToken) {
+    try {
+      const backendUrl = new URL(c.req.url).origin
+      const { preferenceId, initPoint, depositAmount } = await createMpPreference({
+        businessId:    business.id,
+        appointmentId: appointment.id,
+        serviceName:   appointment.serviceName,
+        price:         appointment.price,
+        depositPercent: business.depositPercent,
+        mpAccessToken: business.mpAccessToken,
+        frontendUrl:   c.env.FRONTEND_URL,
+        backendUrl,
+      })
+
+      // Guardar preferenceId en el turno
+      await db
+        .update(appointments)
+        .set({ mpPreferenceId: preferenceId, updatedAt: new Date() })
+        .where(eq(appointments.id, appointment.id))
+
+      return c.json(
+        {
+          appointment: {
+            id:          appointment.id,
+            date:        appointment.date,
+            time:        appointment.time,
+            serviceName: appointment.serviceName,
+            price:       appointment.price,
+            status:      appointment.status,
+          },
+          deposit: {
+            required:      true,
+            percent:       business.depositPercent,
+            amount:        depositAmount,
+            initPoint,
+            expiresAt:     appointment.paymentExpiresAt,
+          },
+        },
+        201
+      )
+    } catch (err) {
+      // Si MP falla, confirmar el turno de todas formas (no bloquear la reserva)
+      console.error('[public/appointments] MP preference error:', err)
+      await db
+        .update(appointments)
+        .set({ status: 'confirmed', paymentExpiresAt: null, updatedAt: new Date() })
+        .where(eq(appointments.id, appointment.id))
+    }
+  }
 
   return c.json(
     {
       appointment: {
-        id: appointment.id,
-        date: appointment.date,
-        time: appointment.time,
+        id:          appointment.id,
+        date:        appointment.date,
+        time:        appointment.time,
         serviceName: appointment.serviceName,
-        price: appointment.price,
-        status: appointment.status,
+        price:       appointment.price,
+        status:      'confirmed',
       },
       deposit: {
-        required: business.depositRequired,
-        percent: business.depositPercent,
-        amount: depositAmount,
+        required: false,
+        percent:  business.depositPercent,
+        amount:   0,
+        initPoint: null,
       },
     },
     201

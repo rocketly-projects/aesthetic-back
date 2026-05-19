@@ -18,13 +18,15 @@ const updateBusinessSchema = z.object({
     .max(100)
     .regex(/^[a-z0-9]+$/, 'slug must be lowercase alphanumeric only')
     .optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  instagram: z.string().optional(),
-  website: z.string().optional(),
-  logoUrl: z.string().optional(),
-  depositRequired: z.boolean().optional(),
-  depositPercent: z.number().int().min(0).max(100).optional(),
+  phone:            z.string().optional(),
+  address:          z.string().optional(),
+  instagram:        z.string().optional(),
+  website:          z.string().optional(),
+  logoUrl:          z.string().optional(),
+  whatsappPhone:    z.string().optional().nullable(),
+  webDepositRequired: z.boolean().optional(),
+  botDepositRequired: z.boolean().optional(),
+  depositPercent:   z.number().int().min(0).max(100).optional(),
 })
 
 const updateHoursSchema = z

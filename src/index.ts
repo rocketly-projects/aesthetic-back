@@ -18,9 +18,12 @@ export type Bindings = {
   FRONTEND_URL: string
   GOOGLE_CLIENT_ID: string
   BOT_API_KEY: string
-  // Mercado Pago
+  // Mercado Pago — plataforma (billing)
   MP_ACCESS_TOKEN: string
   MP_WEBHOOK_SECRET: string
+  // Mercado Pago — OAuth (señas por negocio)
+  MP_CLIENT_ID: string
+  MP_CLIENT_SECRET: string
 }
 
 export type Variables = {
