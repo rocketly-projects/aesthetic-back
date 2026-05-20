@@ -301,16 +301,24 @@ billingRoutes.post('/deposit-webhook', async (c) => {
   const paymentId = body.data?.id
   if (!paymentId) return c.json({ ok: true })
 
-  // Verificar el pago contra la API de MP
-  // Necesitamos el access_token del negocio — lo obtenemos desde el appointment
   const db = createDb(c.env.DATABASE_URL)
 
-  // Buscar el appointment por mpPreferenceId no es directo — MP nos da paymentId
-  // Primero obtenemos el pago para extraer el external_reference (= appointmentId)
-  // Usamos el MP_ACCESS_TOKEN de plataforma solo para leer el pago
-  // (MP permite leer pagos con cualquier token que tenga acceso)
+  // businessId viene en el notification_url que armamos al crear la preferencia
+  const businessId = c.req.query('businessId')
+
+  // Obtener el access_token del negocio para leer el pago (es su pago, no de la plataforma)
+  let mpToken = c.env.MP_ACCESS_TOKEN  // fallback: token de plataforma
+  if (businessId) {
+    const [biz] = await db
+      .select({ mpAccessToken: businesses.mpAccessToken })
+      .from(businesses)
+      .where(eq(businesses.id, businessId))
+      .limit(1)
+    if (biz?.mpAccessToken) mpToken = biz.mpAccessToken
+  }
+
   const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-    headers: { Authorization: `Bearer ${c.env.MP_ACCESS_TOKEN}` },
+    headers: { Authorization: `Bearer ${mpToken}` },
   })
 
   if (!mpRes.ok) {

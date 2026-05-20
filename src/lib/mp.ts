@@ -42,7 +42,7 @@ export async function createMpPreference(
       failure: `${input.frontendUrl}/reserva/fallida`,
       pending: `${input.frontendUrl}/reserva/pendiente`,
     },
-    notification_url:     `${input.backendUrl}/billing/deposit-webhook`,
+    notification_url:     `${input.backendUrl}/billing/deposit-webhook?businessId=${input.businessId}`,
     external_reference:   input.appointmentId,
     expiration_date_from: new Date().toISOString(),
     expiration_date_to:   expiresAt,
