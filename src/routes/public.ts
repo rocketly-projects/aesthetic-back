@@ -286,7 +286,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
             required:      true,
             percent:       business.depositPercent,
             amount:        depositAmount,
-            initPoint:     sandboxInitPoint ?? initPoint,
+            initPoint,
             expiresAt:     appointment.paymentExpiresAt,
           },
         },
