@@ -5,6 +5,7 @@
 
 export interface MpPreferenceInput {
   businessId:    string
+  businessSlug:  string        // para armar back_urls con el slug del negocio
   appointmentId: string
   serviceName:   string
   price:         number        // precio total del servicio (en pesos)
@@ -38,9 +39,9 @@ export async function createMpPreference(
       },
     ],
     back_urls: {
-      success: `${input.frontendUrl}/reserva/confirmada`,
-      failure: `${input.frontendUrl}/reserva/fallida`,
-      pending: `${input.frontendUrl}/reserva/pendiente`,
+      success: `${input.frontendUrl}/reserva/confirmada?slug=${input.businessSlug}`,
+      failure: `${input.frontendUrl}/reserva/fallida?slug=${input.businessSlug}`,
+      pending: `${input.frontendUrl}/reserva/pendiente?slug=${input.businessSlug}`,
     },
     notification_url:     `${input.backendUrl}/billing/deposit-webhook?businessId=${input.businessId}`,
     external_reference:   input.appointmentId,

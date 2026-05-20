@@ -257,6 +257,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
       const backendUrl = new URL(c.req.url).origin
       const { preferenceId, initPoint, sandboxInitPoint, depositAmount } = await createMpPreference({
         businessId:    business.id,
+        businessSlug:  business.slug,
         appointmentId: appointment.id,
         serviceName:   appointment.serviceName,
         price:         appointment.price,
@@ -321,6 +322,45 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
     },
     201
   )
+})
+
+// ─── GET /public/appointment/:id — resumen público para el comprobante ────────
+
+publicRoutes.get('/appointment/:id', async (c) => {
+  const db = createDb(c.env.DATABASE_URL)
+  const id = c.req.param('id')
+
+  const [row] = await db
+    .select({
+      id:             appointments.id,
+      serviceName:    appointments.serviceName,
+      date:           appointments.date,
+      time:           appointments.time,
+      price:          appointments.price,
+      status:         appointments.status,
+      depositPercent: businesses.depositPercent,
+      businessName:   businesses.name,
+      businessSlug:   businesses.slug,
+    })
+    .from(appointments)
+    .innerJoin(businesses, eq(appointments.businessId, businesses.id))
+    .where(eq(appointments.id, id))
+    .limit(1)
+
+  if (!row) return c.json({ error: 'Appointment not found' }, 404)
+
+  const depositAmount = Math.round((row.price * row.depositPercent) / 100)
+
+  return c.json({
+    id:           row.id,
+    serviceName:  row.serviceName,
+    date:         row.date,
+    time:         row.time,
+    status:       row.status,
+    depositAmount,
+    businessName: row.businessName,
+    businessSlug: row.businessSlug,
+  })
 })
 
 export { publicRoutes }

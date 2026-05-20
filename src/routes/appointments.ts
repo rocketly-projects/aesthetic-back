@@ -154,7 +154,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
 
   if (authSource === 'bot') {
     const [biz] = await db
-      .select({ botDepositRequired: businesses.botDepositRequired, depositPercent: businesses.depositPercent, mpAccessToken: businesses.mpAccessToken })
+      .select({ botDepositRequired: businesses.botDepositRequired, depositPercent: businesses.depositPercent, mpAccessToken: businesses.mpAccessToken, slug: businesses.slug })
       .from(businesses)
       .where(eq(businesses.id, businessId))
       .limit(1)
@@ -191,6 +191,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
       const backendUrl = new URL(c.req.url).origin
       const { preferenceId, initPoint, sandboxInitPoint, depositAmount } = await createMpPreference({
         businessId,
+        businessSlug:  biz.slug,
         appointmentId: appointment.id,
         serviceName:   service.name,
         price:         service.price,
