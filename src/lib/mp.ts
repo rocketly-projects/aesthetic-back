@@ -15,9 +15,10 @@ export interface MpPreferenceInput {
 }
 
 export interface MpPreferenceResult {
-  preferenceId: string
-  initPoint:    string
-  depositAmount: number
+  preferenceId:     string
+  initPoint:        string        // URL de producción
+  sandboxInitPoint: string | null // URL de sandbox (solo para cuentas de prueba)
+  depositAmount:    number
 }
 
 export async function createMpPreference(
@@ -64,8 +65,9 @@ export async function createMpPreference(
   const data = await res.json() as { id: string; init_point: string; sandbox_init_point?: string }
 
   return {
-    preferenceId:  data.id,
-    initPoint:     data.sandbox_init_point ?? data.init_point,
+    preferenceId:      data.id,
+    initPoint:         data.init_point,
+    sandboxInitPoint:  data.sandbox_init_point ?? null,
     depositAmount,
   }
 }

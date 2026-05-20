@@ -189,7 +189,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
   if (needsDeposit && mpAccessToken) {
     try {
       const backendUrl = new URL(c.req.url).origin
-      const { preferenceId, initPoint, depositAmount } = await createMpPreference({
+      const { preferenceId, initPoint, sandboxInitPoint, depositAmount } = await createMpPreference({
         businessId,
         appointmentId: appointment.id,
         serviceName:   service.name,
@@ -207,7 +207,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
 
       return c.json({
         appointment: { ...appointment, status: 'awaiting_payment' as const },
-        deposit: { required: true, percent: depositPercent, amount: depositAmount, initPoint, expiresAt: paymentExpiresAt },
+        deposit: { required: true, percent: depositPercent, amount: depositAmount, initPoint: sandboxInitPoint ?? initPoint, expiresAt: paymentExpiresAt },
       }, 201)
     } catch (err) {
       // Si MP falla, confirmar de todas formas

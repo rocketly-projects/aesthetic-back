@@ -255,7 +255,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
   if (business.webDepositRequired && business.mpAccessToken) {
     try {
       const backendUrl = new URL(c.req.url).origin
-      const { preferenceId, initPoint, depositAmount } = await createMpPreference({
+      const { preferenceId, initPoint, sandboxInitPoint, depositAmount } = await createMpPreference({
         businessId:    business.id,
         appointmentId: appointment.id,
         serviceName:   appointment.serviceName,
@@ -286,7 +286,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
             required:      true,
             percent:       business.depositPercent,
             amount:        depositAmount,
-            initPoint,
+            initPoint:     sandboxInitPoint ?? initPoint,
             expiresAt:     appointment.paymentExpiresAt,
           },
         },
