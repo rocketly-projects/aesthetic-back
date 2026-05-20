@@ -64,6 +64,9 @@ export async function createMpPreference(
 
   const data = await res.json() as { id: string; init_point: string; sandbox_init_point?: string }
 
+  console.log('[mp] init_point:', data.init_point)
+  console.log('[mp] sandbox_init_point:', data.sandbox_init_point ?? 'none')
+
   return {
     preferenceId:      data.id,
     initPoint:         data.init_point,
