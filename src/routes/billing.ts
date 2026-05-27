@@ -5,6 +5,7 @@ import { createDb } from '../lib/db'
 import { businesses, users, appointments } from '../db/schema'
 import { zv } from '../lib/validator'
 import { authMiddleware } from '../middleware/auth'
+import { insertNotification } from '../lib/notifications'
 import type { Bindings, Variables } from '../index'
 
 // ── MercadoPago OAuth helpers ─────────────────────────────────────────────────
@@ -355,6 +356,16 @@ billingRoutes.post('/deposit-webhook', async (c) => {
         updatedAt:   new Date(),
       })
       .where(eq(appointments.id, appointmentId))
+
+    // Notificación al dueño del negocio
+    await insertNotification(
+      db,
+      appt.businessId,
+      'payment_received',
+      'Seña recibida',
+      `Pago confirmado para el turno del ${appt.date} a las ${appt.time} (${appt.serviceName})`,
+      appt.id
+    )
   } else if (payment.status === 'cancelled' || payment.status === 'rejected') {
     await db
       .update(appointments)

@@ -9,6 +9,7 @@ import { whatsappRoutes } from './routes/whatsapp'
 import { botRoutes } from './routes/bot'
 import { publicRoutes } from './routes/public'
 import { billingRoutes } from './routes/billing'
+import { notificationRoutes } from './routes/notifications'
 import { authMiddleware } from './middleware/auth'
 import { dualAuth } from './middleware/botAuth'
 
@@ -63,6 +64,7 @@ api.route('/clients', clientRoutes)
 api.route('/services', serviceRoutes)
 api.route('/appointments', appointmentRoutes)
 api.route('/whatsapp', whatsappRoutes)
+api.route('/notifications', notificationRoutes)
 app.route('/', api)
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404))

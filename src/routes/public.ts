@@ -6,6 +6,7 @@ import { createDb } from '../lib/db'
 import { businesses, businessHours, services, appointments, clients } from '../db/schema'
 import { zv, zvQuery } from '../lib/validator'
 import { createMpPreference } from '../lib/mp'
+import { insertNotification } from '../lib/notifications'
 import type { Bindings, Variables } from '../index'
 import { BusinessError } from '../index'
 
@@ -250,6 +251,16 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
 
     return appt
   })
+
+  // Notificación al dueño del negocio
+  await insertNotification(
+    db,
+    business.id,
+    'new_appointment',
+    'Nuevo turno',
+    `${clientName} reservó ${service.name} para el ${appointment.date} a las ${appointment.time}`,
+    appointment.id
+  )
 
   // Si requiere depósito y MP está conectado, crear preferencia de pago
   if (business.webDepositRequired && business.mpAccessToken) {

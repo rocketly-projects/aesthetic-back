@@ -2,6 +2,12 @@ import { pgTable, text, boolean, timestamp, pgEnum, uuid, integer } from 'drizzl
 import { relations } from 'drizzle-orm'
 
 // Enums
+export const notificationTypeEnum = pgEnum('notification_type', [
+  'new_appointment',
+  'payment_received',
+  'reminder_sent',
+])
+
 export const appointmentStatusEnum = pgEnum('appointment_status', [
   'pending',
   'confirmed',
@@ -157,15 +163,31 @@ export const whatsappMessages = pgTable('whatsapp_messages', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 })
 
+export const notifications = pgTable('notifications', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  businessId: uuid('business_id').notNull().references(() => businesses.id, { onDelete: 'cascade' }),
+  type:       notificationTypeEnum('type').notNull(),
+  title:      text('title').notNull(),
+  body:       text('body').notNull(),
+  entityId:   uuid('entity_id'),
+  read:       boolean('read').default(false).notNull(),
+  createdAt:  timestamp('created_at').defaultNow().notNull(),
+})
+
 // Relations
 
 export const businessesRelations = relations(businesses, ({ many }) => ({
-  businessHours: many(businessHours),
-  users: many(users),
-  clients: many(clients),
-  services: many(services),
-  appointments: many(appointments),
-  whatsappChats: many(whatsappChats),
+  businessHours:  many(businessHours),
+  users:          many(users),
+  clients:        many(clients),
+  services:       many(services),
+  appointments:   many(appointments),
+  whatsappChats:  many(whatsappChats),
+  notifications:  many(notifications),
+}))
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  business: one(businesses, { fields: [notifications.businessId], references: [businesses.id] }),
 }))
 
 export const businessHoursRelations = relations(businessHours, ({ one }) => ({
