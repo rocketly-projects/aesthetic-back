@@ -104,7 +104,7 @@ appointmentRoutes.get('/agenda/:date', async (c) => {
   return c.json({ date, appointments: dayAppointments, availableSlots })
 })
 
-appointmentRoutes.get('/', requireJwt, zvQuery(listQuerySchema), async (c) => {
+appointmentRoutes.get('/', zvQuery(listQuerySchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
   const { page, limit, status, date, clientId } = c.req.valid('query')
