@@ -189,9 +189,10 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
 
   // Si requiere depósito, crear preferencia MP y actualizar el turno
   if (needsDeposit && mpAccessToken) {
+    const depositAmount = Math.round((service.price * depositPercent) / 100)
     try {
       const backendUrl = new URL(c.req.url).origin
-      const { preferenceId, initPoint, sandboxInitPoint, depositAmount } = await createMpPreference({
+      const { preferenceId, initPoint, depositAmount: mpDepositAmount } = await createMpPreference({
         businessId,
         businessSlug:  businessSlug,
         appointmentId: appointment.id,
@@ -210,12 +211,17 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
 
       return c.json({
         appointment: { ...appointment, status: 'awaiting_payment' as const },
-        deposit: { required: true, percent: depositPercent, amount: depositAmount, initPoint, expiresAt: paymentExpiresAt },
+        deposit: { required: true, percent: depositPercent, amount: mpDepositAmount, initPoint, expiresAt: paymentExpiresAt },
       }, 201)
     } catch (err) {
-      // Si MP falla, confirmar de todas formas
-      console.error('[appointments/post] MP error:', err)
-      await db.update(appointments).set({ status: 'confirmed', paymentExpiresAt: null, updatedAt: new Date() }).where(eq(appointments.id, appointment.id))
+      // Si MP falla, devolvemos el turno como awaiting_payment sin link de pago
+      // El bot debe informarle al cliente que intente de nuevo
+      console.error('[appointments/post] MP preference error:', err)
+      return c.json({
+        appointment: { ...appointment, status: 'awaiting_payment' as const },
+        deposit: { required: true, percent: depositPercent, amount: depositAmount, initPoint: null, expiresAt: paymentExpiresAt },
+        mpError: true,
+      }, 201)
     }
   }
 
