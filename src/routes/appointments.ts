@@ -151,6 +151,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
   let needsDeposit = false
   let mpAccessToken: string | null = null
   let depositPercent = 0
+  let businessSlug = ''
 
   if (authSource === 'bot') {
     const [biz] = await db
@@ -160,9 +161,10 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
       .limit(1)
 
     if (biz?.botDepositRequired && biz.mpAccessToken) {
-      needsDeposit  = true
-      mpAccessToken = biz.mpAccessToken
+      needsDeposit   = true
+      mpAccessToken  = biz.mpAccessToken
       depositPercent = biz.depositPercent
+      businessSlug   = biz.slug
     }
   }
 
@@ -191,7 +193,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
       const backendUrl = new URL(c.req.url).origin
       const { preferenceId, initPoint, sandboxInitPoint, depositAmount } = await createMpPreference({
         businessId,
-        businessSlug:  biz.slug,
+        businessSlug:  businessSlug,
         appointmentId: appointment.id,
         serviceName:   service.name,
         price:         service.price,
