@@ -188,18 +188,22 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
     })
     .returning()
 
-  // Notificación al dueño del negocio
-  const clientName = clientId
-    ? (await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId)).limit(1))[0]?.name ?? 'Cliente'
-    : 'Cliente'
-  await insertNotification(
-    db,
-    businessId,
-    'new_appointment',
-    'Nuevo turno',
-    `${clientName} reservó ${service.name} para el ${appointment.date} a las ${appointment.time}`,
-    appointment.id
-  )
+  // Notificación al dueño del negocio (no debe romper la reserva si falla)
+  try {
+    const clientName = clientId
+      ? (await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId)).limit(1))[0]?.name ?? 'Cliente'
+      : 'Cliente'
+    await insertNotification(
+      db,
+      businessId,
+      'new_appointment',
+      'Nuevo turno',
+      `${clientName} reservó ${service.name} para el ${appointment.date} a las ${appointment.time}`,
+      appointment.id
+    )
+  } catch (err) {
+    console.error('[appointments/post] notification error:', err)
+  }
 
   // Si requiere depósito, crear preferencia MP y actualizar el turno
   if (needsDeposit && mpAccessToken) {
