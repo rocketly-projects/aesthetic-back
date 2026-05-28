@@ -6,6 +6,7 @@ import { appointments, clients, services, businessHours, businesses } from '../d
 import { zv, zvQuery } from '../lib/validator'
 import { requireJwt } from '../middleware/botAuth'
 import { createMpPreference } from '../lib/mp'
+import { insertNotification } from '../lib/notifications'
 import type { Bindings, Variables } from '../index'
 
 const ALL_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show', 'awaiting_payment'] as const
@@ -186,6 +187,19 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
       paymentExpiresAt,
     })
     .returning()
+
+  // Notificación al dueño del negocio
+  const clientName = clientId
+    ? (await db.select({ name: clients.name }).from(clients).where(eq(clients.id, clientId)).limit(1))[0]?.name ?? 'Cliente'
+    : 'Cliente'
+  await insertNotification(
+    db,
+    businessId,
+    'new_appointment',
+    'Nuevo turno',
+    `${clientName} reservó ${service.name} para el ${appointment.date} a las ${appointment.time}`,
+    appointment.id
+  )
 
   // Si requiere depósito, crear preferencia MP y actualizar el turno
   if (needsDeposit && mpAccessToken) {
