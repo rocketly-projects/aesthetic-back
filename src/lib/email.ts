@@ -39,7 +39,7 @@ export async function sendWhatsappRequestEmail(
     },
     body: JSON.stringify({
       from:    'aesthetic <onboarding@resend.dev>',
-      to:      ['montesagustin99@gmail.com'],
+      to:      ['aesthetic.rocketly@gmail.com'],
       subject: `[aesthetic] Nueva solicitud WhatsApp — ${input.businessName}`,
       html: `
         <h2>Nueva solicitud de WhatsApp</h2>
