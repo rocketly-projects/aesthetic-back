@@ -25,6 +25,8 @@ export type Bindings = {
   // Mercado Pago — OAuth (señas por negocio)
   MP_CLIENT_ID: string
   MP_CLIENT_SECRET: string
+  // Email (Resend)
+  RESEND_API_KEY: string
 }
 
 export type Variables = {
