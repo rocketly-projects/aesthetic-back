@@ -55,3 +55,51 @@ export async function sendWhatsappRequestEmail(
     throw new Error(`Resend error: ${res.status} — ${err}`)
   }
 }
+
+// ── Deactivation request ────────────────────────────────────────────────────
+
+export interface WhatsappDeactivationEmailInput {
+  businessId:   string
+  businessName: string
+  whatsappPhone: string | null
+  contactName:  string
+  contactPhone: string
+  notes?:       string
+}
+
+export async function sendWhatsappDeactivationEmail(
+  input: WhatsappDeactivationEmailInput,
+  resendApiKey: string
+): Promise<void> {
+  const bodyLines = [
+    `<p><strong>Negocio:</strong> ${input.businessName} (ID: ${input.businessId})</p>`,
+    `<p><strong>Número actual:</strong> ${input.whatsappPhone ?? 'no registrado'}</p>`,
+    `<p><strong>Contacto:</strong> ${input.contactName}</p>`,
+    `<p><strong>Teléfono/Email de contacto:</strong> ${input.contactPhone}</p>`,
+    input.notes ? `<p><strong>Notas:</strong> ${input.notes}</p>` : '',
+  ].filter(Boolean).join('\n')
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  `Bearer ${resendApiKey}`,
+    },
+    body: JSON.stringify({
+      from:    'aesthetic <onboarding@resend.dev>',
+      to:      ['aesthetic.rocketly@gmail.com'],
+      subject: `[aesthetic] Solicitud de baja WhatsApp — ${input.businessName}`,
+      html: `
+        <h2>Solicitud de baja del bot de WhatsApp</h2>
+        ${bodyLines}
+        <hr/>
+        <p style="color:#888;font-size:12px">aesthetic · sistema de gestión</p>
+      `,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Resend error: ${res.status} — ${err}`)
+  }
+}

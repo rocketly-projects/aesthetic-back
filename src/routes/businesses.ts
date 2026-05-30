@@ -7,7 +7,7 @@ import { zv } from '../lib/validator'
 import { slugify } from '../lib/slug'
 import { requireJwt } from '../middleware/botAuth'
 import { insertNotification } from '../lib/notifications'
-import { sendWhatsappRequestEmail } from '../lib/email'
+import { sendWhatsappRequestEmail, sendWhatsappDeactivationEmail } from '../lib/email'
 import type { Bindings, Variables } from '../index'
 
 const businessRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -167,6 +167,45 @@ businessRoutes.post('/me/whatsapp-request', requireJwt, zv(whatsappRequestSchema
     )
   } catch (err) {
     console.error('[whatsapp-request] email error:', err)
+  }
+
+  return c.json({ ok: true })
+})
+
+const whatsappDeactivationSchema = z.object({
+  contactName:  z.string().min(1).max(100),
+  contactPhone: z.string().min(1).max(100),
+  notes:        z.string().max(500).optional(),
+})
+
+businessRoutes.post('/me/whatsapp-deactivation-request', requireJwt, zv(whatsappDeactivationSchema), async (c) => {
+  const db         = createDb(c.env.DATABASE_URL)
+  const businessId = c.get('businessId')
+  const data       = c.req.valid('json')
+
+  const [business] = await db
+    .select({ name: businesses.name, whatsappPhone: businesses.whatsappPhone })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1)
+
+  if (!business) return c.json({ error: 'Business not found' }, 404)
+
+  // Email a Agustín — no debe romper el flujo si falla
+  try {
+    await sendWhatsappDeactivationEmail(
+      {
+        businessId,
+        businessName:  business.name,
+        whatsappPhone: business.whatsappPhone,
+        contactName:   data.contactName,
+        contactPhone:  data.contactPhone,
+        notes:         data.notes,
+      },
+      c.env.RESEND_API_KEY
+    )
+  } catch (err) {
+    console.error('[whatsapp-deactivation-request] email error:', err)
   }
 
   return c.json({ ok: true })

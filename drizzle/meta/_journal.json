@@ -92,6 +92,13 @@
       "when": 1780181126380,
       "tag": "0012_cloudy_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780184095230,
+      "tag": "0013_same_silver_sable",
+      "breakpoints": true
     }
   ]
 }
