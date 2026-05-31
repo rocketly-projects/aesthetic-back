@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { eq, and, ne, asc } from 'drizzle-orm'
+import { eq, and, ne, asc, ilike } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
 import { businesses, businessHours, services, appointments, clients } from '../db/schema'
@@ -34,6 +34,27 @@ async function getBusinessBySlug(db: ReturnType<typeof createDb>, slug: string) 
     .limit(1)
   return business ?? null
 }
+
+// ─── GET /public/businesses/search?q=xxx ──────────────────────────────────────
+
+publicRoutes.get('/businesses/search', async (c) => {
+  const q = (c.req.query('q') ?? '').trim()
+  if (q.length < 2) return c.json({ businesses: [] })
+
+  const db = createDb(c.env.DATABASE_URL)
+  const rows = await db
+    .select({
+      name:    businesses.name,
+      slug:    businesses.slug,
+      address: businesses.address,
+      logoUrl: businesses.logoUrl,
+    })
+    .from(businesses)
+    .where(ilike(businesses.name, `%${q}%`))
+    .limit(8)
+
+  return c.json({ businesses: rows })
+})
 
 // ─── GET /public/:slug ─────────────────────────────────────────────────────────
 
