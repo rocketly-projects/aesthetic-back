@@ -53,7 +53,7 @@ publicRoutes.get('/businesses/search', async (c) => {
     const rows = await db
       .select(cols)
       .from(businesses)
-      .orderBy(desc(businesses.createdAt))
+      .orderBy(asc(businesses.createdAt))
       .limit(5)
     return c.json({ businesses: rows })
   }
