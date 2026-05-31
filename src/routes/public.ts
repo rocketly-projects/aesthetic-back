@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { eq, and, ne, asc, ilike } from 'drizzle-orm'
+import { eq, and, ne, asc, desc, ilike } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
 import { businesses, businessHours, services, appointments, clients } from '../db/schema'
@@ -38,17 +38,29 @@ async function getBusinessBySlug(db: ReturnType<typeof createDb>, slug: string) 
 // ─── GET /public/businesses/search?q=xxx ──────────────────────────────────────
 
 publicRoutes.get('/businesses/search', async (c) => {
-  const q = (c.req.query('q') ?? '').trim()
-  if (q.length < 2) return c.json({ businesses: [] })
+  const q   = (c.req.query('q') ?? '').trim()
+  const db  = createDb(c.env.DATABASE_URL)
 
-  const db = createDb(c.env.DATABASE_URL)
+  const cols = {
+    name:    businesses.name,
+    slug:    businesses.slug,
+    address: businesses.address,
+    logoUrl: businesses.logoUrl,
+  }
+
+  // Sin query → devolver los últimos 5 negocios registrados
+  if (q.length < 2) {
+    const rows = await db
+      .select(cols)
+      .from(businesses)
+      .orderBy(desc(businesses.createdAt))
+      .limit(5)
+    return c.json({ businesses: rows })
+  }
+
+  // Con query → búsqueda por nombre (case-insensitive)
   const rows = await db
-    .select({
-      name:    businesses.name,
-      slug:    businesses.slug,
-      address: businesses.address,
-      logoUrl: businesses.logoUrl,
-    })
+    .select(cols)
     .from(businesses)
     .where(ilike(businesses.name, `%${q}%`))
     .limit(8)
