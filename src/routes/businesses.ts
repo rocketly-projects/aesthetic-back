@@ -191,6 +191,12 @@ businessRoutes.post('/me/whatsapp-deactivation-request', requireJwt, zv(whatsapp
 
   if (!business) return c.json({ error: 'Business not found' }, 404)
 
+  // Marcar la solicitud de baja en la DB
+  await db
+    .update(businesses)
+    .set({ whatsappDeactivationRequestedAt: new Date(), updatedAt: new Date() })
+    .where(eq(businesses.id, businessId))
+
   // Email a Agustín — no debe romper el flujo si falla
   try {
     await sendWhatsappDeactivationEmail(

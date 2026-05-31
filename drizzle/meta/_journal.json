@@ -99,6 +99,13 @@
       "when": 1780184095230,
       "tag": "0013_same_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780185856250,
+      "tag": "0014_ancient_stephen_strange",
+      "breakpoints": true
     }
   ]
 }

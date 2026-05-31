@@ -1,0 +1,1 @@
+ALTER TABLE "businesses" ADD COLUMN "whatsapp_deactivation_requested_at" timestamp;

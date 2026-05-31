@@ -56,6 +56,7 @@ export const businesses = pgTable('businesses', {
   // WhatsApp setup request
   whatsappRequestedAt: timestamp('whatsapp_requested_at'),
   whatsappBotActive: boolean('whatsapp_bot_active').default(false).notNull(),
+  whatsappDeactivationRequestedAt: timestamp('whatsapp_deactivation_requested_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
