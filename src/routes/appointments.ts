@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq, and, asc, sql, getTableColumns } from 'drizzle-orm'
+import { eq, and, asc, gte, lte, sql, getTableColumns } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
 import { appointments, clients, services, businessHours, businesses } from '../db/schema'
@@ -29,10 +29,12 @@ const updateAppointmentSchema = z.object({
 })
 
 const listQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  status: z.enum(ALL_STATUSES).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  page:     z.coerce.number().int().min(1).default(1),
+  limit:    z.coerce.number().int().min(1).max(300).default(20),
+  status:   z.enum(ALL_STATUSES).optional(),
+  date:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   clientId: z.string().uuid().optional(),
 })
 
@@ -108,7 +110,7 @@ appointmentRoutes.get('/agenda/:date', async (c) => {
 appointmentRoutes.get('/', zvQuery(listQuerySchema), async (c) => {
   const db = createDb(c.env.DATABASE_URL)
   const businessId = c.get('businessId')
-  const { page, limit, status, date, clientId } = c.req.valid('query')
+  const { page, limit, status, date, dateFrom, dateTo, clientId } = c.req.valid('query')
 
   const offset = (page - 1) * limit
 
@@ -122,8 +124,10 @@ appointmentRoutes.get('/', zvQuery(listQuerySchema), async (c) => {
     .where(
       and(
         eq(appointments.businessId, businessId),
-        status ? eq(appointments.status, status) : undefined,
-        date ? eq(appointments.date, date) : undefined,
+        status   ? eq(appointments.status,   status)   : undefined,
+        date     ? eq(appointments.date,     date)     : undefined,
+        dateFrom ? gte(appointments.date,    dateFrom) : undefined,
+        dateTo   ? lte(appointments.date,    dateTo)   : undefined,
         clientId ? eq(appointments.clientId, clientId) : undefined
       )
     )
