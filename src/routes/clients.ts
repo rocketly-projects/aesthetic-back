@@ -67,7 +67,7 @@ clientRoutes.get('/:id', requireJwt, async (c) => {
     .where(and(eq(clients.id, id), eq(clients.businessId, businessId)))
     .limit(1)
 
-  if (!client) return c.json({ error: 'Client not found' }, 404)
+  if (!client) return c.json({ error: 'Cliente no encontrado' }, 404)
 
   return c.json({ client })
 })
@@ -84,7 +84,7 @@ clientRoutes.put('/:id', requireJwt, zv(updateClientSchema), async (c) => {
     .where(and(eq(clients.id, id), eq(clients.businessId, businessId)))
     .returning()
 
-  if (!updated) return c.json({ error: 'Client not found' }, 404)
+  if (!updated) return c.json({ error: 'Cliente no encontrado' }, 404)
 
   return c.json({ client: updated })
 })
@@ -99,7 +99,7 @@ clientRoutes.delete('/:id', requireJwt, async (c) => {
     .where(and(eq(clients.id, id), eq(clients.businessId, businessId)))
     .returning()
 
-  if (!deleted) return c.json({ error: 'Client not found' }, 404)
+  if (!deleted) return c.json({ error: 'Cliente no encontrado' }, 404)
 
   return c.json({ success: true })
 })

@@ -75,7 +75,7 @@ publicRoutes.get('/:slug', async (c) => {
   const slug = c.req.param('slug')
 
   const business = await getBusinessBySlug(db, slug)
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   const hours = await db
     .select()
@@ -110,7 +110,7 @@ publicRoutes.get('/:slug/services', async (c) => {
   const slug = c.req.param('slug')
 
   const business = await getBusinessBySlug(db, slug)
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   const rows = await db
     .select()
@@ -143,7 +143,7 @@ publicRoutes.get('/:slug/availability', zvQuery(availabilityQuerySchema), async 
   const { date, serviceId } = c.req.valid('query')
 
   const business = await getBusinessBySlug(db, slug)
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   const [service] = await db
     .select()
@@ -151,7 +151,7 @@ publicRoutes.get('/:slug/availability', zvQuery(availabilityQuerySchema), async 
     .where(and(eq(services.id, serviceId), eq(services.businessId, business.id), eq(services.visible, true)))
     .limit(1)
 
-  if (!service) return c.json({ error: 'Service not found' }, 404)
+  if (!service) return c.json({ error: 'Servicio no encontrado' }, 404)
 
   // Day of week (0=Sunday … 6=Saturday) — use noon UTC to avoid tz shifting
   const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay()
@@ -210,7 +210,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
   const { serviceId, date, time, clientName, clientPhone, clientEmail } = c.req.valid('json')
 
   const business = await getBusinessBySlug(db, slug)
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   const [service] = await db
     .select()
@@ -218,7 +218,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
     .where(and(eq(services.id, serviceId), eq(services.businessId, business.id), eq(services.visible, true)))
     .limit(1)
 
-  if (!service) return c.json({ error: 'Service not found' }, 404)
+  if (!service) return c.json({ error: 'Servicio no encontrado' }, 404)
 
   const appointment = await db.transaction(async (tx) => {
     // Race condition check: re-verify slot availability inside the transaction
@@ -242,7 +242,7 @@ publicRoutes.post('/:slug/appointments', zv(createPublicAppointmentSchema), asyn
       return slotStart < apptEnd && slotEnd > apptStart
     })
 
-    if (overlaps) throw new BusinessError('This time slot is no longer available', 409)
+    if (overlaps) throw new BusinessError('El horario ya no está disponible', 409)
 
     // Find or create client by phone within this business
     let [client] = await tx
@@ -391,7 +391,7 @@ publicRoutes.get('/appointment/:id', async (c) => {
     .where(eq(appointments.id, id))
     .limit(1)
 
-  if (!row) return c.json({ error: 'Appointment not found' }, 404)
+  if (!row) return c.json({ error: 'Turno no encontrado' }, 404)
 
   const depositAmount = Math.round((row.price * row.depositPercent) / 100)
 

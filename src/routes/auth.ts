@@ -35,6 +35,11 @@ authRoutes.post('/register', zv(registerSchema), async (c) => {
   const { email, password, name, businessName } = c.req.valid('json')
   const db = createDb(c.env.DATABASE_URL)
 
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
+  if (existing) {
+    return c.json({ error: 'El email ya está registrado' }, 409)
+  }
+
   const passwordHash = await bcrypt.hash(password, 12)
 
   const slug = await createUniqueSlug(db, businessName)
@@ -77,12 +82,12 @@ authRoutes.post('/login', zv(loginSchema), async (c) => {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
 
   if (!user || !user.passwordHash) {
-    return c.json({ error: 'Invalid credentials' }, 401)
+    return c.json({ error: 'Email o contraseña incorrectos' }, 401)
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) {
-    return c.json({ error: 'Invalid credentials' }, 401)
+    return c.json({ error: 'Email o contraseña incorrectos' }, 401)
   }
 
   const [business] = await db
@@ -118,7 +123,7 @@ authRoutes.post('/google', zv(googleSchema), async (c) => {
     const name = payload['name']
 
     if (typeof email !== 'string' || typeof name !== 'string') {
-      return c.json({ error: 'Invalid Google token payload' }, 401)
+      return c.json({ error: 'No se pudo verificar tu cuenta de Google' }, 401)
     }
 
     googleEmail = email
@@ -126,9 +131,9 @@ authRoutes.post('/google', zv(googleSchema), async (c) => {
   } catch (err: unknown) {
     // jose errors have a `code` field (ERR_JWT_EXPIRED, ERR_JWS_INVALID, etc.)
     if (err !== null && typeof err === 'object' && 'code' in err) {
-      return c.json({ error: 'Invalid or expired Google token' }, 401)
+      return c.json({ error: 'El acceso con Google expiró, intentá de nuevo' }, 401)
     }
-    return c.json({ error: 'Failed to verify Google token' }, 500)
+    return c.json({ error: 'Error al verificar con Google, intentá de nuevo' }, 500)
   }
 
   const [existingUser] = await db

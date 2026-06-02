@@ -69,7 +69,7 @@ api.route('/whatsapp', whatsappRoutes)
 api.route('/notifications', notificationRoutes)
 app.route('/', api)
 
-app.notFound((c) => c.json({ error: 'Not found' }, 404))
+app.notFound((c) => c.json({ error: 'No encontrado' }, 404))
 
 app.onError((err, c) => {
   const isDev = c.env.FRONTEND_URL?.includes('localhost')
@@ -78,11 +78,11 @@ app.onError((err, c) => {
   const pgCode = (err as { code?: string }).code
 
   if (pgCode === '23505') {
-    return c.json({ error: 'Resource already exists' }, 409)
+    return c.json({ error: 'El recurso ya existe' }, 409)
   }
 
   if (pgCode === 'P0002' || (err.message && err.message.includes('not found'))) {
-    return c.json({ error: 'Resource not found' }, 404)
+    return c.json({ error: 'Recurso no encontrado' }, 404)
   }
 
   // BusinessError
@@ -90,7 +90,7 @@ app.onError((err, c) => {
     return c.json({ error: err.message }, err.status)
   }
 
-  const message = isDev ? err.message : 'Internal server error'
+  const message = isDev ? err.message : 'Error interno, intentá de nuevo más tarde'
   return c.json({ error: message }, 500)
 })
 

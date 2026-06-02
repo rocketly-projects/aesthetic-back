@@ -113,7 +113,7 @@ whatsappRoutes.get('/chats/:id', requireJwt, async (c) => {
     .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
     .limit(1)
 
-  if (!chat) return c.json({ error: 'Chat not found' }, 404)
+  if (!chat) return c.json({ error: 'Chat no encontrado' }, 404)
 
   return c.json({ chat })
 })
@@ -138,7 +138,7 @@ whatsappRoutes.patch('/chats/:id', zv(updateChatSchema), async (c) => {
       .from(whatsappChats)
       .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
       .limit(1)
-    if (!chat) return c.json({ error: 'Chat not found' }, 404)
+    if (!chat) return c.json({ error: 'Chat no encontrado' }, 404)
     return c.json({ chat })
   }
 
@@ -148,7 +148,7 @@ whatsappRoutes.patch('/chats/:id', zv(updateChatSchema), async (c) => {
     .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
     .returning()
 
-  if (!updated) return c.json({ error: 'Chat not found' }, 404)
+  if (!updated) return c.json({ error: 'Chat no encontrado' }, 404)
 
   return c.json({ chat: updated })
 })
@@ -165,7 +165,7 @@ whatsappRoutes.get('/chats/:id/messages', requireJwt, zvQuery(messagesQuerySchem
     .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
     .limit(1)
 
-  if (!chat) return c.json({ error: 'Chat not found' }, 404)
+  if (!chat) return c.json({ error: 'Chat no encontrado' }, 404)
 
   const offset = (page - 1) * limit
 
@@ -192,7 +192,7 @@ whatsappRoutes.post('/chats/:id/messages', zv(sendMessageSchema), async (c) => {
     .where(and(eq(whatsappChats.id, id), eq(whatsappChats.businessId, businessId)))
     .limit(1)
 
-  if (!chat) return c.json({ error: 'Chat not found' }, 404)
+  if (!chat) return c.json({ error: 'Chat no encontrado' }, 404)
 
   const now = new Date()
 

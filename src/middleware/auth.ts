@@ -7,7 +7,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
     const authHeader = c.req.header('Authorization')
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return c.json({ error: 'Unauthorized' }, 401)
+      return c.json({ error: 'No autorizado' }, 401)
     }
 
     const token = authHeader.slice(7)
@@ -20,7 +20,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Bindings; Variables: 
       c.set('role', payload.role)
       await next()
     } catch {
-      return c.json({ error: 'Unauthorized' }, 401)
+      return c.json({ error: 'No autorizado' }, 401)
     }
   }
 )

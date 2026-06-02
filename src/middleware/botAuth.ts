@@ -53,7 +53,7 @@ export const dualAuth = createMiddleware<Env>(async (c, next) => {
       .limit(1)
 
     if (!business) {
-      return c.json({ error: 'Business not found' }, 404)
+      return c.json({ error: 'Negocio no encontrado' }, 404)
     }
 
     c.set('businessId', business.id)

@@ -52,7 +52,7 @@ businessRoutes.get('/me', requireJwt, async (c) => {
     .where(eq(businesses.id, businessId))
     .limit(1)
 
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   return c.json({ business })
 })
@@ -128,7 +128,7 @@ businessRoutes.post('/me/whatsapp-request', requireJwt, zv(whatsappRequestSchema
     .where(eq(businesses.id, businessId))
     .limit(1)
 
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   // Marcar la solicitud en la DB
   await db
@@ -189,7 +189,7 @@ businessRoutes.post('/me/whatsapp-deactivation-request', requireJwt, zv(whatsapp
     .where(eq(businesses.id, businessId))
     .limit(1)
 
-  if (!business) return c.json({ error: 'Business not found' }, 404)
+  if (!business) return c.json({ error: 'Negocio no encontrado' }, 404)
 
   // Marcar la solicitud de baja en la DB
   await db

@@ -65,7 +65,7 @@ serviceRoutes.get('/:id', requireJwt, async (c) => {
     .where(and(eq(services.id, id), eq(services.businessId, businessId)))
     .limit(1)
 
-  if (!service) return c.json({ error: 'Service not found' }, 404)
+  if (!service) return c.json({ error: 'Servicio no encontrado' }, 404)
 
   return c.json({ service })
 })
@@ -82,7 +82,7 @@ serviceRoutes.put('/:id', requireJwt, zv(updateServiceSchema), async (c) => {
     .where(and(eq(services.id, id), eq(services.businessId, businessId)))
     .returning()
 
-  if (!updated) return c.json({ error: 'Service not found' }, 404)
+  if (!updated) return c.json({ error: 'Servicio no encontrado' }, 404)
 
   return c.json({ service: updated })
 })
@@ -99,7 +99,7 @@ serviceRoutes.delete('/:id', requireJwt, async (c) => {
     .where(and(eq(services.id, id), eq(services.businessId, businessId)))
     .returning()
 
-  if (!updated) return c.json({ error: 'Service not found' }, 404)
+  if (!updated) return c.json({ error: 'Servicio no encontrado' }, 404)
 
   return c.json({ service: updated })
 })

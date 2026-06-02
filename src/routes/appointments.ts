@@ -52,7 +52,7 @@ appointmentRoutes.get('/agenda/:date', async (c) => {
   const date = c.req.param('date')
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return c.json({ error: 'Invalid date format, use YYYY-MM-DD' }, 400)
+    return c.json({ error: 'Formato de fecha inválido, usá YYYY-MM-DD' }, 400)
   }
 
   // Use noon UTC to avoid date shifting across timezones
@@ -146,7 +146,7 @@ appointmentRoutes.post('/', zv(createAppointmentSchema), async (c) => {
     .where(and(eq(services.id, serviceId), eq(services.businessId, businessId)))
     .limit(1)
 
-  if (!service) return c.json({ error: 'Service not found' }, 404)
+  if (!service) return c.json({ error: 'Servicio no encontrado' }, 404)
 
   // El owner siempre confirma directamente; el bot respeta botDepositRequired
   let needsDeposit = false
@@ -264,7 +264,7 @@ appointmentRoutes.get('/:id', requireJwt, async (c) => {
     .where(and(eq(appointments.id, id), eq(appointments.businessId, businessId)))
     .limit(1)
 
-  if (!appointment) return c.json({ error: 'Appointment not found' }, 404)
+  if (!appointment) return c.json({ error: 'Turno no encontrado' }, 404)
 
   return c.json({ appointment })
 })
@@ -281,7 +281,7 @@ appointmentRoutes.put('/:id', requireJwt, zv(updateAppointmentSchema), async (c)
     .where(and(eq(appointments.id, id), eq(appointments.businessId, businessId)))
     .limit(1)
 
-  if (!existing) return c.json({ error: 'Appointment not found' }, 404)
+  if (!existing) return c.json({ error: 'Turno no encontrado' }, 404)
 
   const [updated] = await db.transaction(async (tx) => {
     const [appt] = await tx
@@ -321,7 +321,7 @@ appointmentRoutes.delete('/:id', async (c) => {
     .where(and(eq(appointments.id, id), eq(appointments.businessId, businessId)))
     .returning()
 
-  if (!updated) return c.json({ error: 'Appointment not found' }, 404)
+  if (!updated) return c.json({ error: 'Turno no encontrado' }, 404)
 
   return c.json({ appointment: updated })
 })
