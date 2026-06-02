@@ -8,6 +8,53 @@ import { authMiddleware } from '../middleware/auth'
 import { insertNotification } from '../lib/notifications'
 import type { Bindings, Variables } from '../index'
 
+// ── MP webhook signature verification ────────────────────────────────────────
+// Docs: https://www.mercadopago.com.ar/developers/en/docs/your-integrations/notifications/webhooks
+//
+// MP envía en cada webhook:
+//   x-signature:  "ts=<timestamp>,v1=<hmac_hex>"
+//   x-request-id: "<uuid>"
+//
+// El string firmado es: "id:<data.id>;request-id:<x-request-id>;ts:<ts>"
+// El HMAC se computa con SHA-256 usando MP_WEBHOOK_SECRET como clave.
+
+async function verifyMpSignature(
+  xSignature: string | undefined,
+  xRequestId: string | undefined,
+  dataId: string,
+  secret: string
+): Promise<boolean> {
+  if (!xSignature || !xRequestId || !dataId) return false
+
+  // Parsear "ts=xxx,v1=yyy"
+  const parts: Record<string, string> = {}
+  for (const part of xSignature.split(',')) {
+    const idx = part.indexOf('=')
+    if (idx !== -1) parts[part.slice(0, idx).trim()] = part.slice(idx + 1).trim()
+  }
+  const ts = parts['ts']
+  const v1 = parts['v1']
+  if (!ts || !v1) return false
+
+  // String firmado
+  const message = `id:${dataId};request-id:${xRequestId};ts:${ts}`
+
+  // Calcular HMAC-SHA256
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const signatureBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message))
+  const computed = Array.from(new Uint8Array(signatureBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+
+  return computed === v1
+}
+
 // ── MercadoPago OAuth helpers ─────────────────────────────────────────────────
 
 const MP_TOKEN_URL = 'https://api.mercadopago.com/oauth/token'
@@ -215,7 +262,25 @@ billingRoutes.post('/webhook', async (c) => {
   const body = await c.req.json<{
     type: string
     data: { id: string }
-  }>()
+  }>().catch(() => null)
+
+  if (!body) return c.json({ ok: true })
+
+  // Verificar firma de MP
+  if (c.env.MP_WEBHOOK_SECRET) {
+    const valid = await verifyMpSignature(
+      c.req.header('x-signature'),
+      c.req.header('x-request-id'),
+      body.data?.id ?? '',
+      c.env.MP_WEBHOOK_SECRET
+    )
+    if (!valid) {
+      console.warn('[webhook] invalid signature — rejecting')
+      return c.json({ error: 'Invalid signature' }, 401)
+    }
+  } else {
+    console.warn('[webhook] MP_WEBHOOK_SECRET not set — skipping signature check')
+  }
 
   console.log('[webhook] received:', JSON.stringify(body))
 
@@ -297,7 +362,25 @@ billingRoutes.post('/webhook', async (c) => {
 
 billingRoutes.post('/deposit-webhook', async (c) => {
   const body = await c.req.json<{ type: string; data: { id: string } }>().catch(() => null)
-  if (!body || body.type !== 'payment') return c.json({ ok: true })
+  if (!body) return c.json({ ok: true })
+
+  // Verificar firma de MP
+  if (c.env.MP_WEBHOOK_SECRET) {
+    const valid = await verifyMpSignature(
+      c.req.header('x-signature'),
+      c.req.header('x-request-id'),
+      body.data?.id ?? '',
+      c.env.MP_WEBHOOK_SECRET
+    )
+    if (!valid) {
+      console.warn('[deposit-webhook] invalid signature — rejecting')
+      return c.json({ error: 'Invalid signature' }, 401)
+    }
+  } else {
+    console.warn('[deposit-webhook] MP_WEBHOOK_SECRET not set — skipping signature check')
+  }
+
+  if (body.type !== 'payment') return c.json({ ok: true })
 
   const paymentId = body.data?.id
   if (!paymentId) return c.json({ ok: true })
