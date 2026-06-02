@@ -53,6 +53,8 @@ export const businesses = pgTable('businesses', {
   planStatus: planStatusEnum('plan_status').default('inactive').notNull(),
   subscriptionId: text('subscription_id'),                          // MP preapproval ID
   subscriptionExpiresAt: timestamp('subscription_expires_at'),
+  // Trial
+  trialEndsAt: timestamp('trial_ends_at'),
   // WhatsApp setup request
   whatsappRequestedAt: timestamp('whatsapp_requested_at'),
   whatsappBotActive: boolean('whatsapp_bot_active').default(false).notNull(),

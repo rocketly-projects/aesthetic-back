@@ -40,9 +40,11 @@ authRoutes.post('/register', zv(registerSchema), async (c) => {
   const slug = await createUniqueSlug(db, businessName)
 
   const { business, user } = await db.transaction(async (tx) => {
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+
     const [business] = await tx
       .insert(businesses)
-      .values({ name: businessName, slug })
+      .values({ name: businessName, slug, trialEndsAt })
       .returning()
 
     const [user] = await tx
@@ -161,9 +163,11 @@ authRoutes.post('/google', zv(googleSchema), async (c) => {
   const slug = await createUniqueSlug(db, businessName)
 
   const { business, user } = await db.transaction(async (tx) => {
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+
     const [business] = await tx
       .insert(businesses)
-      .values({ name: businessName, slug })
+      .values({ name: businessName, slug, trialEndsAt })
       .returning()
 
     const [user] = await tx

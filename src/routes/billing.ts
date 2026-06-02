@@ -160,6 +160,7 @@ billingRoutes.get('/status', authMiddleware, async (c) => {
       planStatus: businesses.planStatus,
       subscriptionId: businesses.subscriptionId,
       subscriptionExpiresAt: businesses.subscriptionExpiresAt,
+      trialEndsAt: businesses.trialEndsAt,
     })
     .from(businesses)
     .where(eq(businesses.id, businessId))
@@ -175,6 +176,7 @@ billingRoutes.get('/status', authMiddleware, async (c) => {
     planStatus: business.planStatus,
     subscriptionId: business.subscriptionId,
     subscriptionExpiresAt: business.subscriptionExpiresAt,
+    trialEndsAt: business.trialEndsAt,
   })
 })
 
