@@ -38,7 +38,7 @@ export async function sendWhatsappRequestEmail(
       Authorization:  `Bearer ${resendApiKey}`,
     },
     body: JSON.stringify({
-      from:    'aesthetic <onboarding@resend.dev>',
+      from:    'aesthetic <noreply@aestheticapp.com.ar>',
       to:      ['aesthetic.rocketly@gmail.com'],
       subject: `[aesthetic] Nueva solicitud WhatsApp — ${input.businessName}`,
       html: `
@@ -86,7 +86,7 @@ export async function sendWhatsappDeactivationEmail(
       Authorization:  `Bearer ${resendApiKey}`,
     },
     body: JSON.stringify({
-      from:    'aesthetic <onboarding@resend.dev>',
+      from:    'aesthetic <noreply@aestheticapp.com.ar>',
       to:      ['aesthetic.rocketly@gmail.com'],
       subject: `[aesthetic] Solicitud de baja WhatsApp — ${input.businessName}`,
       html: `
