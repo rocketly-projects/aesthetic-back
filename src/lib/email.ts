@@ -56,6 +56,47 @@ export async function sendWhatsappRequestEmail(
   }
 }
 
+// ── Password reset ──────────────────────────────────────────────────────────
+
+export async function sendPasswordResetEmail(
+  input: { email: string; name: string; resetUrl: string },
+  resendApiKey: string
+): Promise<void> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  `Bearer ${resendApiKey}`,
+    },
+    body: JSON.stringify({
+      from:    'aesthetic <noreply@aestheticapp.com.ar>',
+      to:      [input.email],
+      subject: 'Recuperar contraseña — aesthetic',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+          <h2 style="margin:0 0 8px;font-size:22px;font-weight:600">Recuperar contraseña</h2>
+          <p style="margin:0 0 24px;color:#666;font-size:14px">Hola ${input.name}, recibimos una solicitud para restablecer tu contraseña.</p>
+          <a href="${input.resetUrl}"
+             style="display:inline-block;background:#3d5a3e;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500">
+            Restablecer contraseña
+          </a>
+          <p style="margin:24px 0 0;color:#999;font-size:12px;line-height:1.6">
+            Este link expira en <strong>1 hora</strong>.<br/>
+            Si no solicitaste el cambio, podés ignorar este email.
+          </p>
+          <hr style="margin:24px 0;border:none;border-top:1px solid #eee"/>
+          <p style="color:#bbb;font-size:11px;margin:0">aesthetic · sistema de gestión</p>
+        </div>
+      `,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Resend error: ${res.status} — ${err}`)
+  }
+}
+
 // ── Deactivation request ────────────────────────────────────────────────────
 
 export interface WhatsappDeactivationEmailInput {

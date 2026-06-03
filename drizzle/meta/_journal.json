@@ -113,6 +113,13 @@
       "when": 1780420274766,
       "tag": "0015_curly_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1780521827622,
+      "tag": "0016_special_chat",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { signJwt } from '../lib/jwt'
 import { zv } from '../lib/validator'
 import { businesses, users } from '../db/schema'
 import { createUniqueSlug } from '../lib/slug'
+import { sendPasswordResetEmail } from '../lib/email'
 import type { Bindings } from '../index'
 
 const authRoutes = new Hono<{ Bindings: Bindings }>()
@@ -196,6 +197,73 @@ authRoutes.post('/google', zv(googleSchema), async (c) => {
   )
 
   return c.json({ token, user, business }, 201)
+})
+
+// ── POST /auth/forgot-password ────────────────────────────────────────────────
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+})
+
+authRoutes.post('/forgot-password', zv(forgotPasswordSchema), async (c) => {
+  const { email } = c.req.valid('json')
+  const db = createDb(c.env.DATABASE_URL)
+
+  // Siempre responder 200 para no revelar si el email existe
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
+  if (!user) return c.json({ ok: true })
+
+  // Solo usuarios con contraseña (no Google-only)
+  if (!user.passwordHash) return c.json({ ok: true })
+
+  const token     = crypto.randomUUID()
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hora
+
+  await db
+    .update(users)
+    .set({ passwordResetToken: token, passwordResetExpiresAt: expiresAt })
+    .where(eq(users.id, user.id))
+
+  const resetUrl = `${c.env.FRONTEND_URL}/reset-password?token=${token}`
+
+  try {
+    await sendPasswordResetEmail({ email, name: user.name, resetUrl }, c.env.RESEND_API_KEY)
+  } catch (err) {
+    console.error('[forgot-password] email error:', err)
+  }
+
+  return c.json({ ok: true })
+})
+
+// ── POST /auth/reset-password ─────────────────────────────────────────────────
+
+const resetPasswordSchema = z.object({
+  token:    z.string().min(1),
+  password: z.string().min(8),
+})
+
+authRoutes.post('/reset-password', zv(resetPasswordSchema), async (c) => {
+  const { token, password } = c.req.valid('json')
+  const db = createDb(c.env.DATABASE_URL)
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.passwordResetToken, token))
+    .limit(1)
+
+  if (!user || !user.passwordResetExpiresAt || user.passwordResetExpiresAt < new Date()) {
+    return c.json({ error: 'El link expiró o no es válido. Solicitá uno nuevo.' }, 400)
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12)
+
+  await db
+    .update(users)
+    .set({ passwordHash, passwordResetToken: null, passwordResetExpiresAt: null })
+    .where(eq(users.id, user.id))
+
+  return c.json({ ok: true })
 })
 
 export { authRoutes }
