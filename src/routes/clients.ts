@@ -59,7 +59,10 @@ clientRoutes.post('/', zv(createClientSchema), async (c) => {
       .limit(1)
 
     if (existing) {
-      return c.json({ error: `Ya existe un cliente con ese teléfono (${existing.name})` }, 409)
+      return c.json({
+        error:   'Ya existe un cliente con ese teléfono',
+        details: { existingClientId: existing.id, existingClientName: existing.name },
+      }, 409)
     }
   }
 
