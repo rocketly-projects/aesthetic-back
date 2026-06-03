@@ -223,11 +223,7 @@ authRoutes.post('/forgot-password', zv(forgotPasswordSchema), async (c) => {
 
   const resetUrl = `${c.env.FRONTEND_URL}/reset-password?token=${token}`
 
-  try {
-    await sendPasswordResetEmail({ email, name: user.name, resetUrl }, c.env.RESEND_API_KEY)
-  } catch (err) {
-    console.error('[forgot-password] email error:', err)
-  }
+  await sendPasswordResetEmail({ email, name: user.name, resetUrl }, c.env.RESEND_API_KEY)
 
   return c.json({ ok: true })
 })
