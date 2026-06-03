@@ -51,6 +51,18 @@ clientRoutes.post('/', zv(createClientSchema), async (c) => {
   const businessId = c.get('businessId')
   const data = c.req.valid('json')
 
+  if (data.phone) {
+    const [existing] = await db
+      .select({ id: clients.id, name: clients.name })
+      .from(clients)
+      .where(and(eq(clients.businessId, businessId), eq(clients.phone, data.phone)))
+      .limit(1)
+
+    if (existing) {
+      return c.json({ error: `Ya existe un cliente con ese teléfono (${existing.name})` }, 409)
+    }
+  }
+
   const [client] = await db.insert(clients).values({ ...data, businessId }).returning()
 
   return c.json({ client }, 201)
