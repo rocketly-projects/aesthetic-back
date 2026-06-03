@@ -213,9 +213,6 @@ authRoutes.post('/forgot-password', zv(forgotPasswordSchema), async (c) => {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
   if (!user) return c.json({ ok: true })
 
-  // Solo usuarios con contraseña (no Google-only)
-  if (!user.passwordHash) return c.json({ ok: true })
-
   const token     = crypto.randomUUID()
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hora
 
