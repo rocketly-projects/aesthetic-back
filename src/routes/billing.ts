@@ -487,6 +487,45 @@ billingRoutes.post('/appointments/expire', async (c) => {
   return c.json({ cancelled: expired.length })
 })
 
+// ── POST /billing/cancel ──────────────────────────────────────────────────────
+
+billingRoutes.post('/cancel', authMiddleware, async (c) => {
+  const db         = createDb(c.env.DATABASE_URL)
+  const businessId = c.get('businessId')
+
+  const [business] = await db
+    .select({ subscriptionId: businesses.subscriptionId, planStatus: businesses.planStatus })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .limit(1)
+
+  if (!business)               return c.json({ error: 'Business not found' }, 404)
+  if (!business.subscriptionId) return c.json({ error: 'No hay suscripción activa' }, 400)
+  if (business.planStatus === 'cancelled') return c.json({ error: 'La suscripción ya está cancelada' }, 400)
+
+  const mpRes = await fetch(`https://api.mercadopago.com/preapproval/${business.subscriptionId}`, {
+    method:  'PATCH',
+    headers: {
+      Authorization:  `Bearer ${c.env.MP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: 'cancelled' }),
+  })
+
+  if (!mpRes.ok) {
+    const err = await mpRes.json()
+    console.error('[cancel] MP error:', err)
+    return c.json({ error: 'Error al cancelar la suscripción en MercadoPago' }, 502)
+  }
+
+  await db
+    .update(businesses)
+    .set({ planStatus: 'cancelled', updatedAt: new Date() })
+    .where(eq(businesses.id, businessId))
+
+  return c.json({ ok: true })
+})
+
 // ── PKCE helpers ─────────────────────────────────────────────────────────────
 
 function base64url(buffer: Uint8Array): string {
