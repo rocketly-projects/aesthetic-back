@@ -6,5 +6,9 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "3605feddabf446a2aaa038d3f7f3c511"
+
 [vars]
 # Las secrets se agregan con: wrangler secret put DATABASE_URL

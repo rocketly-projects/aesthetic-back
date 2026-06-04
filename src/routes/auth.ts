@@ -78,18 +78,37 @@ authRoutes.post('/register', zv(registerSchema), async (c) => {
 
 authRoutes.post('/login', zv(loginSchema), async (c) => {
   const { email, password } = c.req.valid('json')
+
+  // ── Rate limiting: 10 intentos por IP cada 15 minutos ──────────────────────
+  const ip  = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown'
+  const rlKey = `ratelimit:login:${ip}`
+  const LIMIT  = 10
+  const TTL    = 15 * 60 // segundos
+
+  const raw     = await c.env.RATE_LIMIT.get(rlKey)
+  const attempts = raw ? parseInt(raw, 10) : 0
+
+  if (attempts >= LIMIT) {
+    return c.json({ error: 'Demasiados intentos. Esperá 15 minutos e intentá de nuevo.' }, 429)
+  }
+
   const db = createDb(c.env.DATABASE_URL)
 
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1)
 
   if (!user || !user.passwordHash) {
+    await c.env.RATE_LIMIT.put(rlKey, String(attempts + 1), { expirationTtl: TTL })
     return c.json({ error: 'Email o contraseña incorrectos' }, 401)
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) {
+    await c.env.RATE_LIMIT.put(rlKey, String(attempts + 1), { expirationTtl: TTL })
     return c.json({ error: 'Email o contraseña incorrectos' }, 401)
   }
+
+  // Login exitoso — limpiar contador
+  await c.env.RATE_LIMIT.delete(rlKey)
 
   const [business] = await db
     .select()

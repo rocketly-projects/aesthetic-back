@@ -27,6 +27,8 @@ export type Bindings = {
   MP_CLIENT_SECRET: string
   // Email (Resend)
   RESEND_API_KEY: string
+  // Rate limiting
+  RATE_LIMIT: KVNamespace
 }
 
 export type Variables = {
