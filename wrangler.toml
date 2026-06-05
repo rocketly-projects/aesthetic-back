@@ -12,3 +12,5 @@ id = "3605feddabf446a2aaa038d3f7f3c511"
 
 [vars]
 # Las secrets se agregan con: wrangler secret put DATABASE_URL
+# WhatsApp Cloud API — versión del Graph API (no es secret, va acá)
+META_GRAPH_API_VERSION = "v22.0"

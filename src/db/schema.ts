@@ -39,6 +39,7 @@ export const businesses = pgTable('businesses', {
   website: text('website'),
   logoUrl: text('logo_url'),
   whatsappPhone: text('whatsapp_phone'),
+  whatsappPhoneNumberId: text('whatsapp_phone_number_id'),
   // Depósitos
   webDepositRequired: boolean('web_deposit_required').default(false).notNull(),
   botDepositRequired: boolean('bot_deposit_required').default(false).notNull(),

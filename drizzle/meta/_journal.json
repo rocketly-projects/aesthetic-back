@@ -120,6 +120,13 @@
       "when": 1780521827622,
       "tag": "0016_special_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780608000000,
+      "tag": "0017_whatsapp_phone_number_id",
+      "breakpoints": true
     }
   ]
 }

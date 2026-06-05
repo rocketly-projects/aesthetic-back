@@ -10,6 +10,7 @@ import { botRoutes } from './routes/bot'
 import { publicRoutes } from './routes/public'
 import { billingRoutes } from './routes/billing'
 import { notificationRoutes } from './routes/notifications'
+import { webhookRoutes } from './routes/webhook'
 import { authMiddleware } from './middleware/auth'
 import { dualAuth } from './middleware/botAuth'
 
@@ -29,6 +30,12 @@ export type Bindings = {
   RESEND_API_KEY: string
   // Rate limiting
   RATE_LIMIT: KVNamespace
+  // WhatsApp Cloud API (Meta)
+  META_APP_SECRET: string
+  META_WEBHOOK_VERIFY_TOKEN: string
+  META_ACCESS_TOKEN: string
+  META_GRAPH_API_VERSION: string
+  N8N_WHATSAPP_WEBHOOK_URL: string
 }
 
 export type Variables = {
@@ -59,6 +66,7 @@ app.route('/auth', authRoutes)
 app.route('/bot', botRoutes)
 app.route('/public', publicRoutes)
 app.route('/billing', billingRoutes)
+app.route('/webhook', webhookRoutes)
 
 // Sub-router protegido (JWT o bot key según la ruta)
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>()
