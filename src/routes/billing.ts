@@ -366,7 +366,11 @@ billingRoutes.post('/deposit-webhook', async (c) => {
   const body = await c.req.json<{ type: string; data: { id: string } }>().catch(() => null)
   if (!body) return c.json({ ok: true })
 
-  // Verificar firma de MP
+  // Verificar firma de MP — solo warn, no bloquear.
+  // El deposit-webhook usa el token OAuth del negocio (Checkout Pro),
+  // cuyas notificaciones no comparten el mismo secret que las suscripciones
+  // de plataforma (MP_WEBHOOK_SECRET). La seguridad se garantiza verificando
+  // el estado del pago directamente contra la API de MP más abajo.
   if (c.env.MP_WEBHOOK_SECRET) {
     const valid = await verifyMpSignature(
       c.req.header('x-signature'),
@@ -375,11 +379,8 @@ billingRoutes.post('/deposit-webhook', async (c) => {
       c.env.MP_WEBHOOK_SECRET
     )
     if (!valid) {
-      console.warn('[deposit-webhook] invalid signature — rejecting')
-      return c.json({ error: 'Invalid signature' }, 401)
+      console.warn('[deposit-webhook] signature mismatch — processing anyway (deposit uses business OAuth token)')
     }
-  } else {
-    console.warn('[deposit-webhook] MP_WEBHOOK_SECRET not set — skipping signature check')
   }
 
   if (body.type !== 'payment') return c.json({ ok: true })
