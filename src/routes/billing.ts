@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, lt } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { businesses, users, appointments } from '../db/schema'
+import { businesses, users, appointments, whatsappChats, whatsappMessages } from '../db/schema'
 import { zv } from '../lib/validator'
 import { authMiddleware } from '../middleware/auth'
 import { insertNotification } from '../lib/notifications'
@@ -393,15 +393,24 @@ billingRoutes.post('/deposit-webhook', async (c) => {
   // businessId viene en el notification_url que armamos al crear la preferencia
   const businessId = c.req.query('businessId')
 
-  // Obtener el access_token del negocio para leer el pago (es su pago, no de la plataforma)
+  // Obtener datos del negocio: token MP para leer el pago + datos WA para notificar al cliente
   let mpToken = c.env.MP_ACCESS_TOKEN  // fallback: token de plataforma
+  let bizWaPhoneNumberId: string | null = null
+  let bizWaBotActive = false
+
   if (businessId) {
     const [biz] = await db
-      .select({ mpAccessToken: businesses.mpAccessToken })
+      .select({
+        mpAccessToken:         businesses.mpAccessToken,
+        whatsappPhoneNumberId: businesses.whatsappPhoneNumberId,
+        whatsappBotActive:     businesses.whatsappBotActive,
+      })
       .from(businesses)
       .where(eq(businesses.id, businessId))
       .limit(1)
-    if (biz?.mpAccessToken) mpToken = biz.mpAccessToken
+    if (biz?.mpAccessToken)         mpToken           = biz.mpAccessToken
+    if (biz?.whatsappPhoneNumberId) bizWaPhoneNumberId = biz.whatsappPhoneNumberId
+    bizWaBotActive = biz?.whatsappBotActive ?? false
   }
 
   const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
@@ -452,6 +461,62 @@ billingRoutes.post('/deposit-webhook', async (c) => {
       `Pago confirmado para el turno del ${appt.date} a las ${appt.time} (${appt.serviceName})`,
       appt.id
     )
+
+    // Notificación proactiva al cliente por WhatsApp
+    if (appt.clientId && bizWaPhoneNumberId && bizWaBotActive) {
+      try {
+        const [chat] = await db
+          .select({ id: whatsappChats.id, clientPhone: whatsappChats.clientPhone })
+          .from(whatsappChats)
+          .where(and(
+            eq(whatsappChats.businessId, appt.businessId),
+            eq(whatsappChats.clientId,   appt.clientId),
+          ))
+          .limit(1)
+
+        if (chat?.clientPhone) {
+          const [day, month, year] = appt.date.split('-').reverse()
+          const fechaLegible = `${day}/${month}/${year}`
+          const msgBody = `✅ ¡Tu seña fue acreditada! Tu turno de *${appt.serviceName}* para el ${fechaLegible} a las ${appt.time} hs está confirmado. ¡Te esperamos! 🎉`
+
+          const waRes = await fetch(
+            `https://graph.facebook.com/${c.env.META_GRAPH_API_VERSION}/${bizWaPhoneNumberId}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization:  `Bearer ${c.env.META_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                recipient_type:    'individual',
+                to:                chat.clientPhone,
+                type:              'text',
+                text:              { body: msgBody },
+              }),
+            }
+          )
+
+          if (waRes.ok) {
+            // Guardar en historial de chat para que aparezca en la app
+            await db.insert(whatsappMessages).values({
+              chatId:     chat.id,
+              businessId: appt.businessId,
+              sender:     'bot',
+              content:    msgBody,
+            })
+            await db.update(whatsappChats)
+              .set({ lastMessage: msgBody, lastMessageAt: new Date() })
+              .where(eq(whatsappChats.id, chat.id))
+          } else {
+            console.error('[deposit-webhook] WA send failed:', await waRes.text())
+          }
+        }
+      } catch (err) {
+        // No debe romper el flujo si la notificación WA falla
+        console.error('[deposit-webhook] WA notification error:', err)
+      }
+    }
   } else if (payment.status === 'cancelled' || payment.status === 'rejected') {
     await db
       .update(appointments)
