@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, and, desc } from 'drizzle-orm'
 import { z } from 'zod'
 import { createDb } from '../lib/db'
-import { whatsappChats, whatsappMessages, clients } from '../db/schema'
+import { whatsappChats, whatsappMessages, clients, businesses } from '../db/schema'
 import { zv, zvQuery } from '../lib/validator'
 import { requireJwt } from '../middleware/botAuth'
 import type { Bindings, Variables } from '../index'
@@ -209,6 +209,38 @@ whatsappRoutes.post('/chats/:id/messages', zv(sendMessageSchema), async (c) => {
 
     return [msg]
   })
+
+  if (sender === 'owner') {
+    const [biz] = await db
+      .select({ whatsappPhoneNumberId: businesses.whatsappPhoneNumberId })
+      .from(businesses)
+      .where(eq(businesses.id, businessId))
+      .limit(1)
+
+    if (biz?.whatsappPhoneNumberId && chat.clientPhone) {
+      const waRes = await fetch(
+        `https://graph.facebook.com/${c.env.META_GRAPH_API_VERSION}/${biz.whatsappPhoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${c.env.META_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: chat.clientPhone,
+            type: 'text',
+            text: { body: content },
+          }),
+        }
+      )
+
+      if (!waRes.ok) {
+        console.error('[whatsapp] manual send to Meta failed:', await waRes.text())
+      }
+    }
+  }
 
   return c.json({ message }, 201)
 })
